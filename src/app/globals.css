@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --canvas: 0 0% 100%;
+  --ink: 220 23% 12%;
+  --body: 220 11% 23%;
+  --muted: 220 9% 28%;
+  --hairline: 0 0% 87%;
+  --primary: 220 23% 12%;
+  --primary-active: 211 30% 7%;
+  --surface-soft: 210 40% 98%;
+  --surface-strong: 220 10% 89%;
+  --surface-dark: 220 23% 12%;
+  --signature-coral: 16 100% 33%;
+  --signature-forest: 126 64% 11%;
+  --signature-cream: 38 62% 90%;
+  --signature-peach: 23 95% 73%;
+  --signature-mint: 155 38% 75%;
+  --signature-mustard: 39 67% 55%;
+  --success: 120 100% 20%;
+  --warning: 36 72% 42%;
+  --danger: 0 74% 42%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: hsl(var(--canvas));
+  color: hsl(var(--ink));
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background: hsl(var(--canvas));
+  color: hsl(var(--body));
+  font-size: 14px;
+  line-height: 1.25;
+  text-rendering: geometricPrecision;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: hsl(var(--signature-mint));
+  color: hsl(var(--ink));
+}
+
+.canvas-grid {
+  background-image:
+    linear-gradient(hsl(var(--hairline) / 0.42) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--hairline) / 0.42) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.focus-ring {
+  outline: 2px solid hsl(214 100% 64%);
+  outline-offset: 2px;
+}

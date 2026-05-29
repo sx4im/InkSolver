@@ -1,0 +1,53 @@
+{
+  "name": "inksolver",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "start": "next start",
+    "lint": "next lint",
+    "smoke:local": "node scripts/smoke-local.mjs",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1053.0",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@tldraw/tlschema": "5.0.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
+    "lucide-react": "^1.16.0",
+    "next": "15.5.18",
+    "postgres": "^3.4.7",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwind-merge": "^2.6.0",
+    "tldraw": "^5.0.1",
+    "zod": "^3.25.76",
+    "zustand": "^5.0.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.21",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.23.0",
+    "eslint-config-next": "15.5.18",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "0.25.12",
+      "postcss": "8.5.15"
+    }
+  }
+}

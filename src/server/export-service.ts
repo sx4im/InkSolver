@@ -1,0 +1,237 @@
+import { promises as fs } from "fs";
+import path from "path";
+import zlib from "zlib";
+
+import type { CanvasDetail, Solution, UserAccount } from "@/lib/types";
+import { getCurrentUser, recordUsageEvent } from "@/server/canvas-repository";
+
+type ExportFormat = "pdf" | "png";
+
+type ExportResult = {
+  canvasId: string;
+  format: ExportFormat;
+  downloadUrl: string;
+  filename: string;
+  watermark: boolean;
+  status: "ready";
+};
+
+const exportRoot = path.join(process.cwd(), ".data", "exports");
+
+export async function createCanvasExport(input: {
+  canvas: CanvasDetail;
+  solutions: Solution[];
+  format: ExportFormat;
+}): Promise<ExportResult> {
+  const user = await getCurrentUser();
+  const watermark = user.plan !== "pro";
+  const timestamp = Date.now();
+  const extension = input.format;
+  const objectKey = path.join(input.canvas.id, `${timestamp}.${extension}`);
+  const filePath = path.join(exportRoot, objectKey);
+  const filename = `${slugify(input.canvas.title)}.${extension}`;
+
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(
+    filePath,
+    input.format === "pdf"
+      ? renderPdf(input.canvas, input.solutions, user, watermark)
+      : renderPngPreview(input.canvas, input.solutions, watermark),
+  );
+
+  await recordUsageEvent({
+    userId: user.id,
+    eventType: "export",
+    metadata: {
+      canvasId: input.canvas.id,
+      format: input.format,
+      watermark,
+    },
+  });
+
+  return {
+    canvasId: input.canvas.id,
+    format: input.format,
+    downloadUrl: `/local-exports/${objectKey.split(path.sep).join("/")}`,
+    filename,
+    watermark,
+    status: "ready",
+  };
+}
+
+function renderPdf(canvas: CanvasDetail, solutions: Solution[], user: UserAccount, watermark: boolean) {
+  const lines = [
+    "InkSolver Export",
+    canvas.title,
+    `Subject: ${canvas.subject}`,
+    `Updated: ${new Date(canvas.updatedAt).toLocaleString("en")}`,
+    `Plan: ${user.plan.toUpperCase()}`,
+    "",
+    ...solutions.flatMap((solution, index) => [
+      `Solution ${index + 1}: ${plain(solution.finalAnswer)}`,
+      `Verification: ${solution.verificationStatus}`,
+      `Problem: ${plain(solution.problemText)}`,
+      ...solution.steps.map((step) => `Step ${step.stepNum}: ${plain(step.latex)} - ${plain(step.explanation)}`),
+      "",
+    ]),
+    watermark ? "Generated with InkSolver free share" : "Generated with InkSolver Pro",
+  ];
+
+  const content = [
+    "BT",
+    "/F1 18 Tf",
+    "72 760 Td",
+    ...lines.flatMap((line, index) => [
+      index === 0 ? "" : "0 -22 Td",
+      `(${escapePdf(line.slice(0, 96))}) Tj`,
+    ]),
+    "ET",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+  ];
+
+  return Buffer.from(buildPdf(objects));
+}
+
+function buildPdf(objects: string[]) {
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+
+  const xrefOffset = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  pdf += offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
+    .join("");
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+
+  return pdf;
+}
+
+function renderPngPreview(canvas: CanvasDetail, solutions: Solution[], watermark: boolean) {
+  const width = 1200;
+  const height = 800;
+  const data = Buffer.alloc(width * height * 3, 255);
+
+  fillRect(data, width, 0, 0, width, height, [248, 250, 252]);
+  fillRect(data, width, 64, 64, 700, 520, [255, 255, 255]);
+  fillRect(data, width, 96, 116, 420, 10, [24, 29, 38]);
+  fillRect(data, width, 96, 156, 260, 8, [24, 29, 38]);
+  fillRect(data, width, 96, 210, 360, 120, [252, 171, 121]);
+  fillRect(data, width, 540, 210, 170, 120, [168, 216, 196]);
+
+  solutions.slice(0, 3).forEach((solution, index) => {
+    const top = 110 + index * 150;
+    const color: [number, number, number] =
+      solution.verificationStatus === "verified"
+        ? [57, 191, 69]
+        : solution.verificationStatus === "mismatch"
+          ? [190, 35, 35]
+          : [244, 184, 60];
+    fillRect(data, width, 820, top, 300, 108, [255, 255, 255]);
+    fillRect(data, width, 844, top + 24, 180, 10, [24, 29, 38]);
+    fillRect(data, width, 844, top + 54, 230, 7, [65, 69, 77]);
+    fillRect(data, width, 844, top + 76, 140, 7, [65, 69, 77]);
+    fillRect(data, width, 1086, top + 24, 18, 18, color);
+  });
+
+  if (watermark) {
+    fillRect(data, width, 64, 700, 260, 36, [245, 233, 212]);
+    fillRect(data, width, 88, 714, 190, 8, [65, 69, 77]);
+  }
+
+  return encodePng(width, height, data);
+}
+
+function fillRect(
+  data: Buffer,
+  width: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: [number, number, number],
+) {
+  for (let row = y; row < y + h; row += 1) {
+    for (let col = x; col < x + w; col += 1) {
+      const index = (row * width + col) * 3;
+      data[index] = color[0];
+      data[index + 1] = color[1];
+      data[index + 2] = color[2];
+    }
+  }
+}
+
+function encodePng(width: number, height: number, rgb: Buffer) {
+  const scanlines = Buffer.alloc((width * 3 + 1) * height);
+
+  for (let y = 0; y < height; y += 1) {
+    const sourceStart = y * width * 3;
+    const targetStart = y * (width * 3 + 1);
+    scanlines[targetStart] = 0;
+    rgb.copy(scanlines, targetStart + 1, sourceStart, sourceStart + width * 3);
+  }
+
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk("IHDR", Buffer.concat([uint32(width), uint32(height), Buffer.from([8, 2, 0, 0, 0])])),
+    pngChunk("IDAT", zlib.deflateSync(scanlines)),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+function pngChunk(type: string, data: Buffer) {
+  const typeBuffer = Buffer.from(type);
+  return Buffer.concat([uint32(data.length), typeBuffer, data, uint32(crc32(Buffer.concat([typeBuffer, data])))]);
+}
+
+function uint32(value: number) {
+  const buffer = Buffer.alloc(4);
+  buffer.writeUInt32BE(value >>> 0);
+  return buffer;
+}
+
+function crc32(buffer: Buffer) {
+  let crc = 0xffffffff;
+
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function escapePdf(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function plain(value: string) {
+  return value.replace(/\\/g, "").replace(/[{}]/g, "");
+}
+
+function slugify(value: string) {
+  return (
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+      .slice(0, 64) || "inksolver-canvas"
+  );
+}
