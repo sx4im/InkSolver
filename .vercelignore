@@ -1,0 +1,8 @@
+# The SymPy verifier is a separate Python service (deploy to Cloud Run, point
+# SYMPY_VERIFIER_URL at it). It is not part of the Next.js frontend build.
+services/
+
+# Local-only dev artifacts and tooling not needed by the Vercel build.
+.data/
+docs/
+scripts/
