@@ -17,6 +17,7 @@ import type { Editor } from "tldraw";
 
 import { CanvasStage } from "@/components/canvas/canvas-stage";
 import { CanvasShareControls } from "@/components/canvas/canvas-share-controls";
+import { Formula } from "@/components/math/math-text";
 import { ChatPanel } from "@/components/canvas/chat-panel";
 import { placeSolutionOnCanvas } from "@/components/canvas/place-solution-on-canvas";
 import { SolutionCard } from "@/components/canvas/solution-card";
@@ -324,7 +325,7 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
 
           {showDemoPrompt ? (
             <div className="pointer-events-none absolute left-[22%] top-[22%] z-10 hidden w-[320px] rounded-lg border border-hairline bg-white/95 p-5 shadow-button md:block">
-              <p className="font-hand text-4xl leading-none text-ink">{"\\int x^2 dx"}</p>
+              <Formula latex="\int x^2\,dx" display className="text-4xl leading-none text-ink" />
               <div className="mt-5 h-2 w-3/4 rounded-full bg-ink/15" />
               <div className="mt-2 h-2 w-1/2 rounded-full bg-ink/15" />
             </div>

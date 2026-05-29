@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "build": {
+    "env": {
+      "INKSOLVER_ALLOW_DEMO_AUTH": "true",
+      "INKSOLVER_DEMO_USER_EMAIL": "demo@inksolver.app",
+      "INKSOLVER_DEMO_USER_NAME": "Demo Student"
+    }
+  },
+  "env": {
+    "INKSOLVER_ALLOW_DEMO_AUTH": "true",
+    "INKSOLVER_DEMO_USER_EMAIL": "demo@inksolver.app",
+    "INKSOLVER_DEMO_USER_NAME": "Demo Student"
+  }
+}

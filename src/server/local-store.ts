@@ -12,7 +12,20 @@ export type LocalState = {
   usageEvents: UsageEvent[];
 };
 
-const dataDir = path.join(process.cwd(), ".data");
+// The local JSON store lives under `.data` for local development. On Vercel's
+// serverless runtime the deployment filesystem is read-only, so fall back to the
+// writable (but ephemeral, per-instance) `/tmp` directory. `INKSOLVER_DATA_DIR`
+// overrides both. This keeps local dev and the smoke suite on `.data` unchanged
+// while letting a credential-free Vercel deploy exercise the full UI. For
+// durable persistence, set `DATABASE_URL` to use Postgres instead.
+function resolveDataDir() {
+  const override = process.env.INKSOLVER_DATA_DIR?.trim();
+  if (override) return override;
+  if (process.env.VERCEL) return path.join("/tmp", "inksolver-data");
+  return path.join(process.cwd(), ".data");
+}
+
+const dataDir = resolveDataDir();
 const dataFile = path.join(dataDir, "inksolver.json");
 const globalForLocalStore = globalThis as typeof globalThis & {
   __inksolverLocalWriteQueue?: Promise<void>;

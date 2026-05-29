@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, FlaskConical, FunctionSquare, PenTool, Sigma, Sparkles } from "lucide-react";
 
 import { CreateCanvasButton } from "@/components/dashboard/create-canvas-button";
+import { Formula } from "@/components/math/math-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
@@ -117,7 +118,7 @@ export function OnboardingFlow() {
                   >
                     <Icon className="h-4 w-4" aria-hidden="true" />
                     <span className="mt-3 block text-sm font-medium">{option.label}</span>
-                    <span className="mt-2 block truncate font-hand text-xl leading-6">{option.sample}</span>
+                    <Formula latex={option.sample} className="mt-2 block max-w-full overflow-x-auto text-lg leading-6" />
                   </button>
                 );
               })}
@@ -126,7 +127,7 @@ export function OnboardingFlow() {
 
           {stepIndex === 1 ? (
             <div className="canvas-grid mt-6 rounded-lg border border-hairline bg-canvas p-5">
-              <p className="font-hand text-4xl leading-none text-ink">{selectedSubject.sample}</p>
+              <Formula latex={selectedSubject.sample} display className="text-4xl leading-none text-ink" />
               <div className="mt-6 h-2 w-2/3 rounded-full bg-ink/15" />
               <div className="mt-2 h-2 w-1/2 rounded-full bg-ink/15" />
             </div>

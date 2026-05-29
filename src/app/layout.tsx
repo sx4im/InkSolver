@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Caveat, Inter } from "next/font/google";
 import "tldraw/tldraw.css";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 import { WebVitalsReporter } from "@/components/telemetry/web-vitals-reporter";
 

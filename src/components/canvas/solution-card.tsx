@@ -1,5 +1,6 @@
 import { ChevronDown, MessageSquareText } from "lucide-react";
 
+import { Formula } from "@/components/math/math-text";
 import { VerificationBadge } from "@/components/canvas/verification-badge";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
@@ -24,7 +25,7 @@ export function SolutionCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase text-muted">AI solution</p>
-          <h3 className="mt-2 font-hand text-3xl leading-none text-ink">{solution.finalAnswer}</h3>
+          <Formula latex={solution.finalAnswer} className="mt-2 text-3xl leading-none text-ink" />
         </div>
         <VerificationBadge status={solution.verificationStatus} />
       </div>
@@ -38,7 +39,7 @@ export function SolutionCard({
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <span className="min-w-0 text-sm font-medium text-ink">
                 Step {step.stepNum}:{" "}
-                <span className="block truncate font-hand text-xl leading-6 sm:inline">{step.latex}</span>
+                <Formula latex={step.latex} className="max-w-full overflow-x-auto align-middle text-lg leading-6" />
               </span>
               <span className="flex shrink-0 items-center gap-2">
                 <VerificationBadge status={step.verificationStatus} compact />
