@@ -4,8 +4,7 @@
       "routePrefix": "/",
       "framework": "nextjs",
       "buildCommand": "pnpm run build",
-      "installCommand": "pnpm install",
-      "outputDirectory": ".next"
+      "installCommand": "pnpm install"
     },
     "verifier": {
       "routePrefix": "/api/verifier",
