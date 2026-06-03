@@ -32,7 +32,6 @@
   --card-foreground: var(--ink);
   --popover: var(--canvas);
   --popover-foreground: var(--ink);
-  --primary: var(--primary);
   --primary-foreground: 0 0% 100%;
   --secondary: var(--surface-soft);
   --secondary-foreground: var(--ink);
