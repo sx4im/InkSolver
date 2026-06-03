@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40" width="160" height="40">
+  <!-- Rounded rectangle background for the icon -->
+  <rect x="0" y="2" width="36" height="36" rx="6" fill="#171c26" />
+  
+  <!-- PenTool icon from Lucide -->
+  <g transform="translate(10, 12) scale(0.66)" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 19l7-7 3 3-7 7-3-3z" />
+    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+    <path d="M2 2l7.586 7.586" />
+    <circle cx="11" cy="11" r="2" />
+  </g>
+  
+  <!-- "InkSolver" text -->
+  <text x="46" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="500" fill="#171c26">InkSolver</text>
+</svg>
