@@ -156,12 +156,6 @@ Contributions welcome! Please open an issue first to discuss what you'd like to 
 
 Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
 
-## Contact
-
-- **Website:** [inksolver.vercel.app](https://inksolver.vercel.app)
-- **Twitter/X:** [@sx4im](https://twitter.com/sx4im)
-- **Email:** msaimshafique4664@gmail.com
-
 ---
 
 Built with passion by [Saim Shafique](https://github.com/sx4im) and AI.
