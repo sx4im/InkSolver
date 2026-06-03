@@ -2,16 +2,11 @@
   "experimentalServices": {
     "frontend": {
       "routePrefix": "/",
-      "framework": "nextjs",
-      "buildCommand": "pnpm run build",
-      "installCommand": "pnpm install"
+      "framework": "nextjs"
     },
     "verifier": {
       "routePrefix": "/api/verifier",
-      "framework": "fastapi",
-      "installCommand": "pip install -r requirements.txt",
-      "buildCommand": "echo 'No build step for verifier'",
-      "rootDirectory": "services/verifier"
+      "framework": "fastapi"
     }
   }
 }
