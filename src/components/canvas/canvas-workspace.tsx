@@ -1,15 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   CheckCircle2,
   Crosshair,
   Download,
   FileWarning,
+  Home,
   Loader2,
   Menu,
   PanelRightClose,
   Save,
+  Settings,
   Sparkles,
   UserCircle,
 } from "lucide-react";
@@ -46,6 +49,7 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
   const [chatMessagesForActive, setChatMessagesForActive] = useState(chatMessages);
   const [focusedChatStep, setFocusedChatStep] = useState<SolutionStep | null>(null);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
+  const [isNavOpen, setIsNavOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [lastSolvedAt, setLastSolvedAt] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string>(canvas.updatedAt);
@@ -275,7 +279,7 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="z-30 flex h-14 shrink-0 items-center justify-between border-b border-hairline bg-canvas px-4">
           <div className="flex min-w-0 items-center gap-3">
-            <Button variant="ghost" size="icon" aria-label="Open navigation">
+            <Button variant="ghost" size="icon" aria-label="Open navigation" onClick={() => setIsNavOpen(true)}>
               <Menu className="h-4 w-4" aria-hidden="true" />
             </Button>
             <InkSolverLogo />
@@ -316,8 +320,10 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
               )}
               <span className="hidden sm:inline">LaTeX</span>
             </Button>
-            <Button variant="secondary" size="icon" aria-label="Account">
-              <UserCircle className="h-4 w-4" aria-hidden="true" />
+            <Button asChild variant="secondary" size="icon" aria-label="Account">
+              <Link href="/settings">
+                <UserCircle className="h-4 w-4" aria-hidden="true" />
+              </Link>
             </Button>
           </div>
         </header>
@@ -328,7 +334,7 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
             onDocumentChange={handleDocumentChange}
             onEditorMount={handleEditorMount}
           />
-          <ToolRail />
+          <ToolRail editor={editorRef.current} />
 
           {showDemoPrompt ? (
             <div className="pointer-events-none absolute left-[22%] top-[22%] z-10 hidden w-[320px] rounded-lg border border-hairline bg-white/95 p-5 shadow-button md:block">
@@ -371,6 +377,39 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
           </div>
         </div>
       </section>
+      {isNavOpen && (
+        <div className="absolute inset-0 z-50 flex">
+          <div className="w-64 border-r border-hairline bg-canvas p-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium text-ink">Navigation</h2>
+              <Button variant="ghost" size="icon" onClick={() => setIsNavOpen(false)}>
+                <PanelRightClose className="h-4 w-4" />
+              </Button>
+            </div>
+            <nav className="mt-4 flex flex-col gap-2">
+              <Button asChild variant="ghost" className="justify-start">
+                <Link href="/">
+                  <Home className="mr-2 h-4 w-4" />
+                  Dashboard
+                </Link>
+              </Button>
+              <Button asChild variant="ghost" className="justify-start">
+                <Link href="/settings">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </Link>
+              </Button>
+              <Button asChild variant="ghost" className="justify-start">
+                <Link href="/feedback">
+                  <FileWarning className="mr-2 h-4 w-4" />
+                  Feedback
+                </Link>
+              </Button>
+            </nav>
+          </div>
+          <div className="flex-1" onClick={() => setIsNavOpen(false)} />
+        </div>
+      )}
       <ChatPanel
         solution={chatSolution}
         focusedStep={focusedChatStep}

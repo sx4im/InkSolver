@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { AlertTriangle, CheckCircle2, CircleDashed, ExternalLink } from "lucide-react";
 
 import { AppHeader } from "@/components/app-header";
@@ -7,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { getReadinessReport, type ReadinessCheck } from "@/server/readiness";
-import { hasAdminAccess } from "@/server/runtime-guards";
+import { getAuthenticatedUser } from "@/server/auth-context";
+
+const OWNER_EMAIL = "msaimshafique4664@gmail.com";
 
 export const dynamic = "force-dynamic";
 
@@ -24,17 +25,18 @@ const statusIcon = {
 };
 
 export default async function ReadinessPage() {
-  const access = hasAdminAccess(await headers());
+  const user = await getAuthenticatedUser();
+  const isOwner = user.email.toLowerCase() === OWNER_EMAIL.toLowerCase();
 
-  if (!access.ok) {
+  if (!isOwner) {
     return (
       <div className="min-h-screen bg-canvas">
         <AppHeader />
         <main className="mx-auto max-w-3xl px-6 py-12">
           <Badge tone="warning">Launch readiness</Badge>
-          <h1 className="mt-6 text-[40px] font-normal leading-[1.2] text-ink">Admin access required.</h1>
+          <h1 className="mt-6 text-[40px] font-normal leading-[1.2] text-ink">Access denied.</h1>
           <p className="mt-5 text-base leading-7 text-body">
-            {access.message} Use the JSON readiness endpoint with the configured admin token after production secrets are connected.
+            This page is restricted to the application owner.
           </p>
         </main>
       </div>

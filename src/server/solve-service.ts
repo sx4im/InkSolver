@@ -1,6 +1,6 @@
 import type { RegionBounds, Solution } from "@/lib/types";
 import { appendSolution, assertCanSolve, getCanvas, recordSolveUsage } from "@/server/canvas-repository";
-import { solveWithGemini } from "@/server/gemini-solver";
+import { solveWithNvidia } from "@/server/nvidia-solver";
 import { storePromptSnapshot } from "@/server/snapshot-storage";
 import { verifySolution } from "@/server/verifier-client";
 
@@ -34,11 +34,11 @@ export async function solveCanvasSelection(request: SolveRequest): Promise<Solut
     promptImageUrl: storedSnapshot?.url ?? null,
   };
 
-  const firstAttempt = await verifySolution(await solveWithGemini(solveInput));
+  const firstAttempt = await verifySolution(await solveWithNvidia(solveInput));
   const solution =
     firstAttempt.verificationStatus === "mismatch"
       ? await verifySolution(
-          await solveWithGemini({
+          await solveWithNvidia({
             ...solveInput,
             verificationFeedback:
               firstAttempt.verificationReason ??

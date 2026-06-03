@@ -55,10 +55,10 @@ const checks: CheckDefinition[] = [
   },
   {
     id: "ai",
-    label: "Gemini solver",
-    description: "Gemini vision/chat credentials for live multimodal solve and follow-up generation.",
-    requiredEnv: ["GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_CHAT_MODEL"],
-    action: "Set Gemini keys/models and smoke-test one handwritten solve plus one follow-up.",
+    label: "NVIDIA NIM solver",
+    description: "NVIDIA NIM vision/chat credentials for live multimodal solve and follow-up generation via StepFun.",
+    requiredEnv: ["NVIDIA_API_KEY", "NVIDIA_MODEL"],
+    action: "Set NVIDIA_API_KEY and NVIDIA_MODEL (default stepfun-ai/step-3.7-flash) and smoke-test one handwritten solve.",
   },
   {
     id: "storage",
