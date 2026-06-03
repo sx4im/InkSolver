@@ -52,6 +52,11 @@ export default function RootLayout({
               formFieldInput: 'border-[1px] border-solid border-black focus:ring-ink focus:border-ink',
               socialButtonsBlockButton: 'border-[1px] border-solid border-black hover:bg-surface-soft',
               footerActionLink: 'text-ink hover:text-primary-active',
+              navbar: 'bg-canvas',
+              pageScrollBox: 'bg-canvas',
+              userProfilePage: 'bg-canvas',
+              userPreviewMainIdentifier: 'text-ink',
+              profileSectionTitle: 'text-ink',
             }
           }}
         >
