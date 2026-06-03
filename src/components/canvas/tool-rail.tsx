@@ -1,4 +1,4 @@
-import { Brush, Circle, Eraser, Image, MousePointer2, PenTool, Shapes, Sparkles } from "lucide-react";
+import { Brush, Circle, Eraser, Image, Loader2, MessageSquare, MousePointer2, PenTool, Shapes, Sparkles } from "lucide-react";
 import type { Editor } from "tldraw";
 
 import { Button } from "@/components/ui/button";
@@ -10,26 +10,32 @@ const tools = [
   { label: "Shape", icon: Circle, toolId: "geo" },
   { label: "Eraser", icon: Eraser, toolId: "eraser" },
   { label: "Geometry", icon: Shapes, toolId: "arrow" },
-  { label: "Image upload", icon: Image, toolId: "asset" },
-  { label: "AI region selector", icon: Sparkles, toolId: null },
+  { label: "Image", icon: Image, toolId: "asset" },
 ];
 
-export function ToolRail({ editor }: { editor: Editor | null }) {
+type BottomToolbarProps = {
+  editor: Editor | null;
+  onSolve: () => void;
+  isSolving: boolean;
+  onToggleChat: () => void;
+};
+
+export function BottomToolbar({ editor, onSolve, isSolving, onToggleChat }: BottomToolbarProps) {
   function handleToolClick(toolId: string | null) {
     if (!editor || !toolId) return;
     editor.setCurrentTool(toolId);
   }
 
   return (
-    <div className="absolute left-4 top-20 z-20 flex w-12 flex-col items-center gap-2 rounded-lg border border-hairline bg-canvas p-1.5">
+    <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-hairline bg-canvas p-1.5 shadow-lg">
       {tools.map((tool) => {
         const Icon = tool.icon;
-
         return (
           <Button
             key={tool.label}
-            variant={tool.label === "AI region selector" ? "primary" : "ghost"}
+            variant="ghost"
             size="icon"
+            className="h-9 w-9"
             aria-label={tool.label}
             title={tool.label}
             onClick={() => handleToolClick(tool.toolId)}
@@ -38,6 +44,20 @@ export function ToolRail({ editor }: { editor: Editor | null }) {
           </Button>
         );
       })}
+      <span className="mx-1 h-5 w-px bg-hairline" />
+      <Button
+        onClick={onSolve}
+        disabled={isSolving}
+        className="h-9 gap-1.5 px-3"
+        size="sm"
+      >
+        {isSolving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+        Solve
+      </Button>
+      <span className="mx-1 h-5 w-px bg-hairline" />
+      <Button variant="secondary" size="icon" className="h-9 w-9" aria-label="Open chat" onClick={onToggleChat}>
+        <MessageSquare className="h-4 w-4" aria-hidden="true" />
+      </Button>
     </div>
   );
 }

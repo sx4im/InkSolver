@@ -23,7 +23,7 @@ import { CanvasShareControls } from "@/components/canvas/canvas-share-controls";
 import { ChatPanel } from "@/components/canvas/chat-panel";
 import { placeSolutionOnCanvas } from "@/components/canvas/place-solution-on-canvas";
 import { SolutionCard } from "@/components/canvas/solution-card";
-import { ToolRail } from "@/components/canvas/tool-rail";
+import { BottomToolbar } from "@/components/canvas/tool-rail";
 import { VerificationBadge } from "@/components/canvas/verification-badge";
 import { InkSolverLogo } from "@/components/brand/inksolver-logo";
 import { Badge } from "@/components/ui/badge";
@@ -334,8 +334,6 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
             onDocumentChange={handleDocumentChange}
             onEditorMount={handleEditorMount}
           />
-          <ToolRail editor={editorRef.current} />
-
           {showDemoPrompt ? (
             <div className="pointer-events-none absolute left-[22%] top-[22%] z-10 hidden w-[320px] rounded-lg border border-hairline bg-white/95 p-5 shadow-button md:block">
               <p className="font-hand text-4xl leading-none text-ink">{"\\int x^2 dx"}</p>
@@ -343,13 +341,6 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
               <div className="mt-2 h-2 w-1/2 rounded-full bg-ink/15" />
             </div>
           ) : null}
-
-          <div className="absolute left-[calc(22%+340px)] top-[calc(22%+18px)] z-20 hidden md:block">
-            <Button onClick={handleSolve} disabled={isSolving} className="pointer-events-auto">
-              {isSolving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
-              Solve selection
-            </Button>
-          </div>
 
           <div className="absolute right-5 top-5 z-20 w-[360px] max-w-[calc(100vw-2.5rem)] space-y-3">
             {activeSolution ? <SolutionCard solution={activeSolution} onAskStep={handleAskStep} /> : null}
@@ -370,11 +361,12 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
             </div>
           </div>
 
-          <div className="absolute bottom-4 right-4 z-20 lg:hidden">
-            <Button variant="secondary" size="icon" aria-label="Open chat" onClick={() => setIsMobileChatOpen(true)}>
-              <PanelRightClose className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
+          <BottomToolbar
+            editor={editorRef.current}
+            onSolve={handleSolve}
+            isSolving={isSolving}
+            onToggleChat={() => setIsMobileChatOpen(true)}
+          />
         </div>
       </section>
       {isNavOpen && (
