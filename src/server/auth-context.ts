@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { headers } from "next/headers";
+import { currentUser } from "@clerk/nextjs/server";
 
 import { DEMO_USER_ID, mockUser } from "@/lib/mock-data";
 import { allowDemoAuthFallback, trustRequestIdentityHeaders } from "@/server/runtime-guards";
@@ -14,7 +15,7 @@ export type AuthenticatedUser = {
   name: string;
   imageUrl?: string | null;
   rawSubject: string;
-  source: "headers" | "env" | "demo";
+  source: "headers" | "env" | "demo" | "clerk";
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -33,6 +34,23 @@ export class AuthenticationRequiredError extends Error {
 }
 
 export async function getAuthenticatedUser(request?: Request): Promise<AuthenticatedUser> {
+  try {
+    const clerkUser = await currentUser();
+    if (clerkUser) {
+      const email = clerkUser.emailAddresses[0]?.emailAddress || `${clerkUser.id}@clerk.local`;
+      return {
+        id: stableUuid(clerkUser.id),
+        rawSubject: clerkUser.id,
+        email,
+        name: clerkUser.firstName ? `${clerkUser.firstName} ${clerkUser.lastName || ''}`.trim() : email.split('@')[0],
+        imageUrl: clerkUser.imageUrl,
+        source: "clerk",
+      };
+    }
+  } catch (err) {
+    // Ignore Clerk errors in environments where it's not configured
+  }
+
   const requestHeaders = await resolveHeaders(request);
   const headerIdentity = requestHeaders && trustRequestIdentityHeaders() ? identityFromHeaders(requestHeaders) : null;
   if (headerIdentity) return headerIdentity;
