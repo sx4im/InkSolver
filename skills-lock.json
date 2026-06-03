@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "clerk-cli": {
+      "source": "/tmp/clerk-cli-skill-7ZUYLB",
+      "sourceType": "local",
+      "computedHash": "40da1ab8bae6401f5f70657f176473f646ef517279383b0f53a3a6c75603ce68"
+    }
+  }
+}

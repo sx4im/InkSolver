@@ -1,3 +1,5 @@
+@import '@clerk/ui/themes/shadcn.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -22,6 +24,27 @@
   --success: 120 100% 20%;
   --warning: 36 72% 42%;
   --danger: 0 74% 42%;
+
+  /* Shadcn UI variable mappings for Clerk */
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--canvas);
+  --card-foreground: var(--ink);
+  --popover: var(--canvas);
+  --popover-foreground: var(--ink);
+  --primary: var(--primary);
+  --primary-foreground: 0 0% 100%;
+  --secondary: var(--surface-soft);
+  --secondary-foreground: var(--ink);
+  --muted-foreground: var(--muted);
+  --accent: var(--surface-soft);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 9% 28%; /* Use a darker color for borders instead of hairline */
+  --input: 220 9% 28%; /* Use a darker color for inputs instead of hairline */
+  --ring: 220 23% 12%; /* Use ink color for focus ring */
+  --radius: 0.5rem;
 }
 
 * {

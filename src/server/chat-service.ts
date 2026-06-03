@@ -132,8 +132,7 @@ async function generateWithGemini(input: {
               {
                 text:
                   "You are InkSolver's follow-up tutor. Answer concisely using the provided solution context. " +
-                  "Do not redo unrelated work. If a step is mismatched, say so and explain the issue. " +
-                  "Wrap any mathematical expressions in single dollar signs (for example $x^2$) so they render correctly.",
+                  "Do not redo unrelated work. If a step is mismatched, say so and explain the issue.",
               },
             ],
           },
@@ -181,7 +180,7 @@ function generateLocalAnswer(input: {
 
   if (step && (lower.includes("why") || lower.includes("step"))) {
     return [
-      `Step ${step.stepNum} says $${step.latex}$.`,
+      `Step ${step.stepNum} says ${step.latex}.`,
       step.explanation,
       verificationSentence(step),
     ].join(" ");
@@ -189,7 +188,7 @@ function generateLocalAnswer(input: {
 
   if (lower.includes("verify") || lower.includes("correct")) {
     return [
-      `The current final answer is $${input.solution.finalAnswer}$.`,
+      `The current final answer is ${input.solution.finalAnswer}.`,
       input.solution.verificationStatus === "verified"
         ? "The verifier marked it correct for the supported symbolic rule."
         : `The verifier marked it ${input.solution.verificationStatus}.`,
@@ -201,7 +200,7 @@ function generateLocalAnswer(input: {
 
   return [
     `This solution reads the problem as: ${input.solution.problemText}`,
-    `The final answer is $${input.solution.finalAnswer}$.`,
+    `The final answer is ${input.solution.finalAnswer}.`,
     step ? `For more detail, ask about step ${step.stepNum}.` : "Ask about a numbered step for more detail.",
   ].join(" ");
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SignInButton, SignUpButton, Show, UserButton } from "@clerk/nextjs";
 import { Activity, Menu, MessageSquareText, Settings, UserCircle } from "lucide-react";
 
 import { InkSolverLogo } from "@/components/brand/inksolver-logo";
@@ -36,9 +37,17 @@ export function AppHeader() {
               Settings
             </Link>
           </Button>
-          <Button variant="secondary" size="icon" aria-label="Account">
-            <UserCircle className="h-4 w-4" aria-hidden="true" />
-          </Button>
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <Button variant="ghost" size="sm">Sign In</Button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <Button variant="primary" size="sm">Sign Up</Button>
+            </SignUpButton>
+          </Show>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
         </nav>
       </div>
     </header>

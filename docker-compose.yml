@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  verifier:
+    build:
+      context: ./services/verifier
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

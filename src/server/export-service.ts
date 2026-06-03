@@ -5,7 +5,7 @@ import zlib from "zlib";
 import type { CanvasDetail, Solution, UserAccount } from "@/lib/types";
 import { getCurrentUser, recordUsageEvent } from "@/server/canvas-repository";
 
-type ExportFormat = "pdf" | "png";
+type ExportFormat = "pdf" | "png" | "latex";
 
 type ExportResult = {
   canvasId: string;
@@ -36,7 +36,9 @@ export async function createCanvasExport(input: {
     filePath,
     input.format === "pdf"
       ? renderPdf(input.canvas, input.solutions, user, watermark)
-      : renderPngPreview(input.canvas, input.solutions, watermark),
+      : input.format === "latex"
+        ? renderLatex(input.canvas, input.solutions, user, watermark)
+        : renderPngPreview(input.canvas, input.solutions, watermark),
   );
 
   await recordUsageEvent({
@@ -57,6 +59,46 @@ export async function createCanvasExport(input: {
     watermark,
     status: "ready",
   };
+}
+
+function renderLatex(canvas: CanvasDetail, solutions: Solution[], user: UserAccount, watermark: boolean) {
+  const lines = [
+    "\\documentclass{article}",
+    "\\usepackage{amsmath}",
+    "\\usepackage{amssymb}",
+    "\\title{" + escapeLatex(canvas.title) + "}",
+    "\\date{" + new Date(canvas.updatedAt).toLocaleDateString("en") + "}",
+    "\\begin{document}",
+    "\\maketitle",
+    "",
+    "\\section*{Problem Details}",
+    `\\textbf{Subject:} ${escapeLatex(canvas.subject)} \\\\`,
+    `\\textbf{Plan:} ${user.plan.toUpperCase()} \\\\`,
+    "",
+    ...solutions.flatMap((solution, index) => [
+      `\\subsection*{Solution ${index + 1}}`,
+      "\\textbf{Problem:}",
+      "\\begin{equation*}",
+      solution.problemText,
+      "\\end{equation*}",
+      "",
+      "\\textbf{Steps:}",
+      "\\begin{align*}",
+      ...solution.steps.map((step) => `  & ${step.latex} && \\text{${escapeLatex(step.explanation)}} \\\\`),
+      "\\end{align*}",
+      "",
+      "\\textbf{Final Answer:}",
+      "\\begin{equation*}",
+      solution.finalAnswer,
+      "\\end{equation*}",
+      `\\textit{Verification Status:} ${solution.verificationStatus}`,
+      "",
+    ]),
+    watermark ? "\\vfill\\noindent\\textit{Generated with InkSolver free share}" : "\\vfill\\noindent\\textit{Generated with InkSolver Pro}",
+    "\\end{document}",
+  ];
+
+  return Buffer.from(lines.join("\n"), "utf-8");
 }
 
 function renderPdf(canvas: CanvasDetail, solutions: Solution[], user: UserAccount, watermark: boolean) {
@@ -219,6 +261,10 @@ function crc32(buffer: Buffer) {
 
 function escapePdf(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function escapeLatex(value: string) {
+  return value.replace(/[\$\%\^\&\_\{\}\~\#\\]/g, "\\$&");
 }
 
 function plain(value: string) {

@@ -1,9 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Loader2, MessageSquare, Send, X } from "lucide-react";
+import { Loader2, MessageSquare, Send, X, Mic } from "lucide-react";
 
-import { Formula, MathProse } from "@/components/math/math-text";
 import { VerificationBadge } from "@/components/canvas/verification-badge";
 import { Button } from "@/components/ui/button";
 import type { ChatMessage, Solution, SolutionStep } from "@/lib/types";
@@ -28,11 +27,53 @@ export function ChatPanel({
 }) {
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
+
+  const toggleListening = () => {
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+    
+    // Check if browser supports speech recognition
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Your browser does not support voice input.");
+      return;
+    }
+    
+    setIsListening(true);
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        }
+      }
+      if (finalTranscript) {
+        setDraft((prev) => prev ? prev + " " + finalTranscript : finalTranscript);
+      }
+    };
+    
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+    
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+    
+    recognition.start();
+  };
 
   useEffect(() => {
     if (!focusedStep) return;
@@ -148,7 +189,7 @@ export function ChatPanel({
         </div>
         {solution ? (
           <div className="mt-3 rounded-md border border-hairline bg-surface-soft p-3">
-            <Formula latex={solution.finalAnswer} className="max-w-full overflow-x-auto text-xl leading-6 text-ink" />
+            <p className="truncate font-hand text-xl leading-6 text-ink">{solution.finalAnswer}</p>
             <div className="mt-2 flex items-center justify-between gap-2">
               <span className="truncate text-xs text-muted">{focusedStep ? `Step ${focusedStep.stepNum}` : "Current solution"}</span>
               <VerificationBadge status={focusedStep?.verificationStatus ?? solution.verificationStatus} compact />
@@ -157,9 +198,7 @@ export function ChatPanel({
         ) : null}
         {focusedStep ? (
           <div className="mt-3 flex items-center justify-between gap-2 rounded-sm border border-info-border/30 bg-canvas px-3 py-2 text-xs text-muted">
-            <span className="flex min-w-0 items-center gap-1 overflow-x-auto">
-              Step {focusedStep.stepNum}: <Formula latex={focusedStep.latex} className="align-middle" />
-            </span>
+            <span className="min-w-0 truncate">Step {focusedStep.stepNum}: {focusedStep.latex}</span>
             <button
               type="button"
               className="shrink-0 rounded-full p-1 text-ink active:bg-surface-soft"
@@ -182,9 +221,7 @@ export function ChatPanel({
                 message.role === "assistant" ? "bg-surface-soft text-body" : "bg-primary text-white",
               )}
             >
-              {message.content ? (
-                <MathProse text={message.content} />
-              ) : (
+              {message.content || (
                 <span className="inline-flex items-center gap-2 text-muted">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                   Thinking
@@ -214,6 +251,9 @@ export function ChatPanel({
             disabled={!solution || isSending}
             onChange={(event) => setDraft(event.target.value)}
           />
+          <Button type="button" variant="secondary" size="icon" aria-label="Voice input" disabled={!solution || isSending} onClick={toggleListening} className={isListening ? "bg-red-100 text-red-600" : ""}>
+            <Mic className="h-4 w-4" aria-hidden="true" />
+          </Button>
           <Button size="icon" aria-label="Send message" disabled={!solution || isSending || !draft.trim()}>
             {isSending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
           </Button>

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { canvases, chatMessages, solutions, usageEvents, users } from "@/db/schema";
+import { canvases, chatMessages, embeddings, solutions, usageEvents, users } from "@/db/schema";
 import {
   DEMO_USER_ID,
   DEMO_CANVAS_ID,
@@ -21,6 +21,7 @@ import type {
 } from "@/lib/types";
 import { getAuthenticatedUser, stableUuid } from "@/server/auth-context";
 import { readLocalState, updateLocalState } from "@/server/local-store";
+import { generateEmbedding } from "@/server/gemini-solver";
 import { isProductionRuntime } from "@/server/runtime-guards";
 
 type CanvasPatch = {
@@ -1011,6 +1012,20 @@ export async function appendSolution(canvasIdentifier: string, solution: Solutio
         createdAt: new Date(nextSolution.createdAt),
       })
       .returning();
+
+    // Generate and store embedding for V1.5 semantic search
+    try {
+      const embeddingValues = await generateEmbedding(nextSolution.problemText);
+      if (embeddingValues && embeddingValues.length === 768) {
+        await db.insert(embeddings).values({
+          solutionId: created.id,
+          problemText: nextSolution.problemText,
+          embedding: embeddingValues,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to generate/store embedding:", err);
+    }
 
     return mapSolutionRow(created);
   }

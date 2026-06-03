@@ -6,7 +6,7 @@ import { getCanvas, getSolutionsForCanvas } from "@/server/canvas-repository";
 import { enforceRateLimit, parseGuardedJson, requestBodyLimits } from "@/server/request-guards";
 
 const exportSchema = z.object({
-  format: z.enum(["pdf", "png"]),
+  format: z.enum(["pdf", "png", "latex"]),
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

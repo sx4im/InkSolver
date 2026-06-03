@@ -7,7 +7,6 @@ import {
 } from "@tldraw/tlschema";
 import type { Editor } from "tldraw";
 
-import { latexToReadable } from "@/lib/latex";
 import type { RegionBounds, Solution } from "@/lib/types";
 
 function placementOrigin(editor: Editor, bounds?: RegionBounds | null) {
@@ -77,7 +76,7 @@ export function placeSolutionOnCanvas(editor: Editor | null, solution: Solution)
       idSeed: `ai-${solution.id}-answer`,
       x: origin.x,
       y: origin.y + 38,
-      text: latexToReadable(solution.finalAnswer),
+      text: solution.finalAnswer,
       size: "xl",
       color: "blue",
       w: 380,
@@ -87,7 +86,7 @@ export function placeSolutionOnCanvas(editor: Editor | null, solution: Solution)
         idSeed: `ai-${solution.id}-step-${step.stepNum}`,
         x: origin.x,
         y: origin.y + 110 + index * 92,
-        text: `Step ${step.stepNum} (${verificationLabel(step.verificationStatus)}): ${latexToReadable(step.latex)}\n${step.explanation}`,
+        text: `Step ${step.stepNum} (${verificationLabel(step.verificationStatus)}): ${step.latex}\n${step.explanation}`,
         size: "s",
         color: "blue",
         w: 430,

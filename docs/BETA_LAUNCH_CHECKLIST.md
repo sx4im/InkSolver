@@ -5,7 +5,6 @@ Use this as the soft-launch gate for the first 50 testers. Items marked local-re
 ## Ship Gate
 
 - [x] Local canvas create, save, solve, follow-up chat, share, and export flows work end to end.
-- [x] Solution answers, steps, chat, onboarding, and thumbnails render typeset math (KaTeX); on-canvas solutions use Unicode-readable math.
 - [x] Write endpoints have bounded JSON/body parsing.
 - [x] Solve snapshots are restricted to base64 PNG, JPEG, or WebP images up to 4 MB decoded.
 - [x] Solve, chat, export, billing, canvas writes, telemetry, and webhooks have in-memory per-IP throttles.

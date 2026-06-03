@@ -21,7 +21,6 @@ This plan is derived from `01-InkSolver.md` and `DESIGN.md`. The project is inte
 - Phase 14 is in progress: public share metadata now includes a generated 1200x630 social preview image for Open Graph/Twitter cards, backed by a cacheable image route that renders the canvas title, subject, sample work, latest solution, and verification states.
 - Phase 15 is in progress: canvas sharing now has a publish/copy/open/unpublish lifecycle in the workspace header, public shares expose real copy/remix actions, and remixing a public canvas creates a private editable copy with the source snapshot and solution history.
 - Phase 16 is in progress: launch readiness is exposed through `/readiness` and `/api/v1/readiness`, tester reports can be captured through `/feedback`, `pnpm smoke:local` automates the local beta checklist against a running app while restoring `.data` afterward, and production guardrails now fail closed for demo auth, trusted headers, unsigned webhooks, diagnostics, and local artifact routes.
-- Phase 17 is complete: solution answers, step expressions, follow-up chat, onboarding samples, the demo prompt, and dashboard thumbnails now render real math with KaTeX instead of raw LaTeX source, the on-canvas placed solution uses a Unicode-readable conversion, and the unused `zustand` dependency was removed.
 
 ## Phase 0 — Product + Design Alignment
 
@@ -253,19 +252,3 @@ Deliverables:
 
 Done when:
 - The local beta smoke script passes, readiness reports the missing external service gates clearly, and tester feedback can be submitted without adding a separate database table.
-
-## Phase 17 — Rendered Math (KaTeX)
-
-Goal: Show students typeset math instead of raw LaTeX source, closing the PRD's "LaTeX rendered via KaTeX" requirement.
-
-Deliverables:
-- A shared, isomorphic `Formula` component (server- and client-safe via `katex.renderToString`) plus a `MathProse` renderer for chat answers that contain inline/display math delimited by `$...$`, `$$...$$`, `\(...\)`, or `\[...\]`.
-- KaTeX stylesheet loaded globally; KaTeX-bundled fonts (no external font fetch).
-- Solution cards, the follow-up chat header/step/messages, onboarding samples, the canvas demo prompt, and dashboard thumbnails render with KaTeX.
-- Graceful fallback to the raw expression in the handwriting face when an expression cannot be parsed (bad OCR / partial stream).
-- `latexToReadable` Unicode conversion (`src/lib/latex.ts`) so on-canvas placed solution shapes read as `∫ x² dx` rather than `\int x^2\,dx`; PDF/PNG exports keep their ASCII-safe `plain()` text because their base-14 PDF font cannot embed Unicode math glyphs.
-- Local chat answers wrap embedded expressions in `$...$`, and the Gemini follow-up prompt asks for the same so streamed answers render.
-- Removed the unused `zustand` dependency.
-
-Done when:
-- A solved canvas shows a typeset fraction/integral on the side card and the public share page, onboarding shows typeset subject samples, and no surface renders literal `\frac`/`\int` source to the reader.
