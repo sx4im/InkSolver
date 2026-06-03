@@ -110,6 +110,14 @@ const checks: CheckDefinition[] = [
     requiredEnv: ["NEXT_PUBLIC_APP_URL"],
     action: "Set NEXT_PUBLIC_APP_URL to the production origin before generating share metadata.",
   },
+  {
+    id: "tldraw",
+    label: "tldraw license",
+    description: "License key required for tldraw production use (free for personal/non-commercial).",
+    requiredEnv: ["NEXT_PUBLIC_TLDRAW_LICENSE_KEY"],
+    action: "Get a free license at https://tldraw.com/pricing and set NEXT_PUBLIC_TLDRAW_LICENSE_KEY.",
+    warning: true,
+  },
 ];
 
 export function getReadinessReport(): ReadinessReport {

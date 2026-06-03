@@ -37,7 +37,11 @@ export function TldrawBoard({ snapshot, onDocumentChange, onEditorMount, readOnl
 
   return (
     <div className="absolute inset-0">
-      <Tldraw snapshot={snapshot ?? undefined} onMount={handleMount} />
+      <Tldraw
+        snapshot={snapshot ?? undefined}
+        onMount={handleMount}
+        licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
+      />
     </div>
   );
 }
