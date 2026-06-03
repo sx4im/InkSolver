@@ -23,7 +23,6 @@ import { CanvasShareControls } from "@/components/canvas/canvas-share-controls";
 import { ChatPanel } from "@/components/canvas/chat-panel";
 import { placeSolutionOnCanvas } from "@/components/canvas/place-solution-on-canvas";
 import { SolutionCard } from "@/components/canvas/solution-card";
-import { BottomToolbar } from "@/components/canvas/tool-rail";
 import { VerificationBadge } from "@/components/canvas/verification-badge";
 import { InkSolverLogo } from "@/components/brand/inksolver-logo";
 import { Badge } from "@/components/ui/badge";
@@ -342,6 +341,13 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
             </div>
           ) : null}
 
+          <div className="absolute left-[calc(22%+340px)] top-[calc(22%+18px)] z-20 hidden md:block">
+            <Button onClick={handleSolve} disabled={isSolving} className="pointer-events-auto">
+              {isSolving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+              Solve selection
+            </Button>
+          </div>
+
           <div className="absolute right-5 top-5 z-20 w-[360px] max-w-[calc(100vw-2.5rem)] space-y-3">
             {activeSolution ? <SolutionCard solution={activeSolution} onAskStep={handleAskStep} /> : null}
             <div className="rounded-lg border border-hairline bg-canvas p-4">
@@ -361,12 +367,11 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
             </div>
           </div>
 
-          <BottomToolbar
-            editor={editorRef.current}
-            onSolve={handleSolve}
-            isSolving={isSolving}
-            onToggleChat={() => setIsMobileChatOpen(true)}
-          />
+          <div className="absolute bottom-4 right-4 z-20">
+            <Button variant="secondary" size="icon" aria-label="Open chat" onClick={() => setIsMobileChatOpen(true)}>
+              <PanelRightClose className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
         </div>
       </section>
       {isNavOpen && (
