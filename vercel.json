@@ -1,14 +1,14 @@
 {
   "experimentalServices": {
     "frontend": {
-      "routeProfile": "/",
+      "routePrefix": "/",
       "framework": "nextjs",
       "buildCommand": "pnpm run build",
       "installCommand": "pnpm install",
       "outputDirectory": ".next"
     },
     "verifier": {
-      "routeProfile": "/api/verifier",
+      "routePrefix": "/api/verifier",
       "framework": "fastapi",
       "installCommand": "pip install -r requirements.txt",
       "buildCommand": "echo 'No build step for verifier'",
