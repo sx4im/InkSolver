@@ -22,6 +22,9 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: "InkSolver",
   description: "AI whiteboard that solves STEM problems as you draw them.",
+  icons: {
+    icon: "/inksolver-icon.svg",
+  },
 };
 
 export default function RootLayout({
