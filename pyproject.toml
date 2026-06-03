@@ -1,2 +1,13 @@
+[project]
+name = "inksolver-verifier"
+version = "0.1.0"
+description = "FastAPI math verifier service"
+dependencies = [
+    "fastapi==0.110.1",
+    "pydantic==2.6.4",
+    "sympy==1.13.3",
+    "uvicorn[standard]==0.29.0"
+]
+
 [tool.vercel]
 entrypoint = "services.verifier.app.main:app"
