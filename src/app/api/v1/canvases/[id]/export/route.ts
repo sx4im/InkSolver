@@ -39,12 +39,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     format: body.format,
   });
 
-  return NextResponse.json({
-    canvas_id: result.canvasId,
-    format: result.format,
-    download_url: result.downloadUrl,
-    filename: result.filename,
-    watermark: result.watermark,
-    status: result.status,
+  // Return the file directly: no dependency on instance-local disk, which does
+  // not survive across serverless invocations.
+  return new Response(new Uint8Array(result.body), {
+    headers: {
+      "Content-Type": result.mimeType,
+      "Content-Disposition": `attachment; filename="${result.filename}"`,
+      "Cache-Control": "no-store",
+      "X-Inksolver-Watermark": result.watermark ? "true" : "false",
+    },
   });
 }

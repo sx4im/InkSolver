@@ -1,4 +1,5 @@
 import type { UsageEvent } from "@/lib/types";
+import { AuthenticationRequiredError } from "@/server/auth-context";
 import { getCurrentUser, listUsageEvents, recordUsageEvent } from "@/server/canvas-repository";
 
 type TelemetryMetadata = Record<string, unknown>;
@@ -7,16 +8,39 @@ export async function trackTelemetryEvent(input: {
   eventType: UsageEvent["eventType"];
   metadata?: TelemetryMetadata | null;
   costUsd?: number;
-}) {
-  const user = await getCurrentUser();
+}): Promise<UsageEvent | null> {
+  let userId: string | null = null;
+
+  try {
+    userId = (await getCurrentUser()).id;
+  } catch (error) {
+    // Telemetry also arrives from public pages (share links, sign-in). Forward
+    // it without a database row instead of failing the request.
+    if (!(error instanceof AuthenticationRequiredError)) throw error;
+  }
+
+  const metadata = {
+    source: "inksolver",
+    ...input.metadata,
+  };
+
+  if (!userId) {
+    void forwardToPostHog({
+      id: crypto.randomUUID(),
+      userId: "anonymous",
+      eventType: input.eventType,
+      costUsd: input.costUsd ?? 0,
+      metadata,
+      createdAt: new Date().toISOString(),
+    });
+    return null;
+  }
+
   const event = await recordUsageEvent({
-    userId: user.id,
+    userId,
     eventType: input.eventType,
     costUsd: input.costUsd,
-    metadata: {
-      source: "inksolver",
-      ...input.metadata,
-    },
+    metadata,
   });
 
   void forwardToPostHog(event);
@@ -125,6 +149,7 @@ async function forwardToPostHog(event: UsageEvent) {
       properties: event.metadata ?? {},
       timestamp: event.createdAt,
     }),
+    signal: AbortSignal.timeout(5000),
   }).catch(() => null);
 }
 
@@ -143,5 +168,6 @@ async function forwardToSentry(error: { name: string; message: string; stack?: s
       extra: metadata ?? {},
       timestamp: new Date().toISOString(),
     }),
+    signal: AbortSignal.timeout(5000),
   }).catch(() => null);
 }

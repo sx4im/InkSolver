@@ -131,6 +131,7 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
             parts: [{ text }],
           },
         }),
+        signal: AbortSignal.timeout(10_000),
       },
     );
 

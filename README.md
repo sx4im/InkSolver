@@ -5,7 +5,7 @@
 Draw equations, diagrams, or math problems on an infinite canvas — InkSolver uses multimodal AI to analyze your sketches and return step-by-step solutions with LaTeX formatting.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-inksolver.vercel.app-blue)](https://inksolver.vercel.app)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
 [![Clerk](https://img.shields.io/badge/Auth-Clerk-6C47FF)](https://clerk.com/)
 [![PostgreSQL](https://img.shields.io/badge/DB-PostgreSQL-336791)](https://www.postgresql.org/)
@@ -17,7 +17,7 @@ Draw equations, diagrams, or math problems on an infinite canvas — InkSolver u
 - **AI-Powered Solving** — Select any region and get step-by-step solutions using NVIDIA NIM (StepFun vision model)
 - **STEM-Focused** — Math, Physics, and Chemistry problem recognition
 - **LaTeX Export** — Download solutions as PDF or LaTeX
-- **Real-time Collaboration** — Share canvases with public links
+- **Public Sharing** — Publish read-only canvases with link previews, and let others remix them
 - **Chat Assistant** — Ask follow-up questions about any solution step
 - **Verification Engine** — Symbolic verification via SymPy to catch errors
 
@@ -25,7 +25,7 @@ Draw equations, diagrams, or math problems on an infinite canvas — InkSolver u
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14 (App Router), React, TypeScript, Tailwind CSS |
+| Frontend | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS |
 | Whiteboard | tldraw |
 | Auth | Clerk |
 | Database | PostgreSQL (Neon) + Drizzle ORM |

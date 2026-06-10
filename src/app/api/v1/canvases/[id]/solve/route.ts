@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { QuotaExceededError } from "@/server/canvas-repository";
+import { SolverError } from "@/server/nvidia-solver";
 import { captureException } from "@/server/observability";
 import {
   enforceRateLimit,
@@ -55,70 +56,106 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (snapshotError) return snapshotError;
 
-  let solution;
-
-  try {
-    solution = await solveCanvasSelection({
-      canvasId: id,
-      regionBounds: body.region_bounds ?? null,
-      snapshotBase64: body.snapshot_b64,
-      mimeType: body.mime_type,
-      problemHint: body.problem_hint,
-    });
-  } catch (error) {
-    if (error instanceof QuotaExceededError) {
-      return Response.json(
-        {
-          error: "Daily solve quota exceeded",
-          code: "quota_exceeded",
-          user: error.user,
-        },
-        { status: 402 },
-      );
-    }
-
-    await captureException(error, {
-      route: "solve",
-      canvasId: id,
-    });
-    throw error;
-  }
-
-  if (!solution) {
-    return Response.json({ error: "Canvas not found" }, { status: 404 });
-  }
-
   const encoder = new TextEncoder();
 
+  // Stream from the first byte: the client gets an immediate `status` event,
+  // periodic heartbeats keep proxies from buffering or timing out while the
+  // model works, and steps flush as soon as the solve completes — with no
+  // artificial pacing delays.
   const stream = new ReadableStream({
     async start(controller) {
-      for (const step of solution.steps) {
-        controller.enqueue(
-          encoder.encode(
-            `event: step\ndata: ${JSON.stringify({
+      let closed = false;
+
+      const send = (event: string, data: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          closed = true;
+        }
+      };
+
+      send("status", { state: "solving" });
+
+      const heartbeat = setInterval(() => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+        } catch {
+          closed = true;
+        }
+      }, 10_000);
+
+      try {
+        const solution = await solveCanvasSelection({
+          canvasId: id,
+          regionBounds: body.region_bounds ?? null,
+          snapshotBase64: body.snapshot_b64,
+          mimeType: body.mime_type,
+          problemHint: body.problem_hint,
+        });
+
+        if (!solution) {
+          send("error", { error: "Canvas not found", code: "not_found" });
+        } else {
+          for (const step of solution.steps) {
+            send("step", {
               step_num: step.stepNum,
               latex: step.latex,
               explanation: step.explanation,
               verified: step.verified,
               verification_status: step.verificationStatus,
-            })}\n\n`,
-          ),
-        );
-        await new Promise((resolve) => setTimeout(resolve, 120));
-      }
+            });
+          }
 
-      controller.enqueue(
-        encoder.encode(
-          `event: done\ndata: ${JSON.stringify({
+          send("done", {
             canvas_id: solution.canvasId,
             solution_id: solution.id,
             solution,
             final_answer: solution.finalAnswer,
             verification_status: solution.verificationStatus,
-          })}\n\n`,
-        ),
-      );
-      controller.close();
+          });
+        }
+      } catch (error) {
+        if (error instanceof QuotaExceededError) {
+          send("error", {
+            error: "Daily solve quota exceeded",
+            code: "quota_exceeded",
+            user: error.user,
+          });
+        } else if (error instanceof SolverError) {
+          await captureException(error, {
+            route: "solve",
+            canvasId: id,
+            solverErrorCode: error.code,
+          });
+          send("error", {
+            error: error.message,
+            code: error.code,
+            retryable: error.retryable,
+          });
+        } else {
+          await captureException(error, {
+            route: "solve",
+            canvasId: id,
+          });
+          send("error", {
+            error: "The solve request failed unexpectedly. Your quota was not used.",
+            code: "internal_error",
+            retryable: true,
+          });
+        }
+      } finally {
+        clearInterval(heartbeat);
+        if (!closed) {
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            // Stream already closed by the client.
+          }
+        }
+      }
     },
   });
 
@@ -127,6 +164,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

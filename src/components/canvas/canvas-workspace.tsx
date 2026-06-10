@@ -27,7 +27,7 @@ import { VerificationBadge } from "@/components/canvas/verification-badge";
 import { InkSolverLogo } from "@/components/brand/inksolver-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { CanvasDetail, CanvasSnapshot, ChatMessage, RegionBounds, Solution, SolutionStep } from "@/lib/types";
+import type { CanvasDetail, ChatMessage, RegionBounds, Solution, SolutionStep } from "@/lib/types";
 import { formatDateTime, subjectLabel } from "@/lib/utils";
 
 type CanvasWorkspaceProps = {
@@ -37,13 +37,19 @@ type CanvasWorkspaceProps = {
 };
 
 type SaveStatus = "saved" | "dirty" | "saving" | "error";
-type RegionMode = "selection" | "demo";
+type RegionMode = "selection" | "viewport" | null;
+
+const autosaveDebounceMs = 1200;
+const maxSaveRetryDelayMs = 30_000;
+// fetch keepalive bodies are capped around 64KB by browsers; larger snapshots
+// rely on the beforeunload prompt plus the regular debounced autosave.
+const keepaliveFlushLimitBytes = 60_000;
 
 export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: CanvasWorkspaceProps) {
   const [solutions, setSolutions] = useState(initialSolutions);
   const [isSolving, setIsSolving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
-  const [regionMode, setRegionMode] = useState<RegionMode>("demo");
+  const [regionMode, setRegionMode] = useState<RegionMode>(null);
   const [showDemoPrompt, setShowDemoPrompt] = useState(!canvas.tldrawState);
   const [chatMessagesForActive, setChatMessagesForActive] = useState(chatMessages);
   const [focusedChatStep, setFocusedChatStep] = useState<SolutionStep | null>(null);
@@ -52,22 +58,152 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
   const [isExporting, setIsExporting] = useState(false);
   const [lastSolvedAt, setLastSolvedAt] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string>(canvas.updatedAt);
+  const [notice, setNotice] = useState<string | null>(null);
   const editorRef = useRef<Editor | null>(null);
-  const latestSnapshotRef = useRef<CanvasSnapshot | null>(canvas.tldrawState);
-  const saveRequestRef = useRef<Promise<void> | null>(null);
   const initialChatSolutionIdRef = useRef(initialSolutions[0]?.id ?? null);
+
+  const dirtyRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const retryCountRef = useRef(0);
+  const debounceTimerRef = useRef<number | null>(null);
+  const retryTimerRef = useRef<number | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
 
   const activeSolution = solutions[0];
   const activeSolutionId = activeSolution?.id ?? null;
   const chatSolution = activeSolution && !activeSolution.id.startsWith("pending_") ? activeSolution : null;
 
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 8000);
+  }, []);
+
+  const performSave = useCallback(async () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (saveInFlightRef.current) return;
+
+    if (retryTimerRef.current) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+
+    saveInFlightRef.current = true;
+    dirtyRef.current = false;
+    setSaveStatus("saving");
+
+    try {
+      // Serialize at send time so the request always carries the latest state.
+      const snapshot = editor.getSnapshot();
+      const response = await fetch(`/api/v1/canvases/${canvas.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          tldraw_state: snapshot,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Save failed with ${response.status}`);
+      }
+
+      const result = (await response.json()) as { updated_at: string };
+      setLastSavedAt(result.updated_at);
+      retryCountRef.current = 0;
+      saveInFlightRef.current = false;
+
+      // Changes made while the request was in flight start another save so
+      // nothing is dropped on slow connections.
+      if (dirtyRef.current) {
+        void performSave();
+      } else {
+        setSaveStatus("saved");
+      }
+    } catch {
+      saveInFlightRef.current = false;
+      dirtyRef.current = true;
+      setSaveStatus("error");
+
+      const retryDelay = Math.min(maxSaveRetryDelayMs, 5000 * 2 ** retryCountRef.current);
+      retryCountRef.current += 1;
+      retryTimerRef.current = window.setTimeout(() => {
+        void performSave();
+      }, retryDelay);
+    }
+  }, [canvas.id]);
+
+  const handleDocumentChange = useCallback(() => {
+    dirtyRef.current = true;
+    setShowDemoPrompt(false);
+    setSaveStatus((current) => (current === "saving" ? current : "dirty"));
+
+    if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = window.setTimeout(() => {
+      void performSave();
+    }, autosaveDebounceMs);
+  }, [performSave]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (dirtyRef.current || saveInFlightRef.current) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+
+    const handlePageHide = () => {
+      if (!dirtyRef.current || saveInFlightRef.current) return;
+      const editor = editorRef.current;
+      if (!editor) return;
+
+      try {
+        const body = JSON.stringify({ tldraw_state: editor.getSnapshot() });
+        if (body.length <= keepaliveFlushLimitBytes) {
+          void fetch(`/api/v1/canvases/${canvas.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body,
+            keepalive: true,
+          });
+        }
+      } catch {
+        // Best-effort flush only.
+      }
+    };
+
+    const handleOnline = () => {
+      if (dirtyRef.current) void performSave();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("online", handleOnline);
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+      if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    };
+  }, [canvas.id, performSave]);
+
   async function handleSolve() {
     if (isSolving) return;
 
-    setIsSolving(true);
-
     const capture = await captureSolveRegion(editorRef.current);
-    setRegionMode(capture.regionBounds ? "selection" : "demo");
+
+    if (!capture.ok) {
+      showNotice(capture.reason);
+      return;
+    }
+
+    setIsSolving(true);
+    setRegionMode(capture.source);
 
     const pendingSolution: Solution = {
       id: `pending_${Date.now()}`,
@@ -100,11 +236,8 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
       });
 
       if (!response.ok || !response.body) {
-        if (response.status === 402) {
-          throw new Error("quota_exceeded");
-        }
-
-        throw new Error(`Solve failed with ${response.status}`);
+        const payload = (await response.json().catch(() => null)) as { error?: string; code?: string } | null;
+        throw new SolveStreamError(payload?.error ?? `Solve failed with ${response.status}`, payload?.code ?? null);
       }
 
       await readSolveStream(response.body, {
@@ -129,37 +262,15 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
           setLastSolvedAt(solution.createdAt);
 
           if (placed) {
-            latestSnapshotRef.current = editorRef.current?.getSnapshot() ?? latestSnapshotRef.current;
             setShowDemoPrompt(false);
-            setSaveStatus("dirty");
-            void saveCanvas();
+            dirtyRef.current = true;
+            void performSave();
           }
         },
       });
     } catch (error) {
-      const isQuotaError = error instanceof Error && error.message === "quota_exceeded";
-
-      setSolutions((current) =>
-        current.map((solution) =>
-          solution.id === pendingSolution.id
-            ? {
-                ...solution,
-                finalAnswer: isQuotaError ? "Daily limit reached" : "Solve failed",
-                steps: [
-                  {
-                    stepNum: 1,
-                    latex: isQuotaError ? "\\text{Upgrade or wait}" : "\\text{Try again}",
-                    explanation: isQuotaError
-                      ? "The free daily solve limit has been used. Upgrade to Pro or wait for the next reset."
-                      : "The solve request could not complete.",
-                    verified: false,
-                    verificationStatus: "unverifiable",
-                  },
-                ],
-              }
-            : solution,
-        ),
-      );
+      setSolutions((current) => current.filter((solution) => solution.id !== pendingSolution.id));
+      showNotice(solveErrorMessage(error));
     } finally {
       setIsSolving(false);
     }
@@ -183,64 +294,25 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
         throw new Error(`Export failed with ${response.status}`);
       }
 
-      const payload = (await response.json()) as { download_url?: string };
-      if (payload.download_url) {
-        window.open(payload.download_url, "_blank", "noopener,noreferrer");
-      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const filename =
+        disposition.match(/filename="([^"]+)"/)?.[1] ??
+        `${canvas.title || "inksolver-canvas"}.${format === "latex" ? "tex" : format}`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      showNotice("Export failed. Try again.");
     } finally {
       setIsExporting(false);
     }
   }
-
-  const saveCanvas = useCallback(async () => {
-    if (saveRequestRef.current) {
-      await saveRequestRef.current;
-      return;
-    }
-
-    const snapshot = latestSnapshotRef.current ?? editorRef.current?.getSnapshot();
-    if (!snapshot) return;
-
-    setSaveStatus("saving");
-
-    const request = fetch(`/api/v1/canvases/${canvas.id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        tldraw_state: snapshot,
-      }),
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Save failed with ${response.status}`);
-        }
-
-        const result = (await response.json()) as { updated_at: string };
-        setLastSavedAt(result.updated_at);
-        setSaveStatus("saved");
-      })
-      .catch(() => {
-        setSaveStatus("error");
-      })
-      .finally(() => {
-        saveRequestRef.current = null;
-      });
-
-    saveRequestRef.current = request;
-    await request;
-  }, [canvas.id]);
-
-  useEffect(() => {
-    if (saveStatus !== "dirty") return;
-
-    const timer = window.setTimeout(() => {
-      void saveCanvas();
-    }, 1000);
-
-    return () => window.clearTimeout(timer);
-  }, [saveCanvas, saveStatus]);
 
   useEffect(() => {
     if (!activeSolutionId) {
@@ -262,12 +334,6 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
     editorRef.current = editor;
   }
 
-  function handleDocumentChange(snapshot: CanvasSnapshot) {
-    latestSnapshotRef.current = snapshot;
-    setShowDemoPrompt(false);
-    setSaveStatus("dirty");
-  }
-
   function handleAskStep(step: SolutionStep) {
     setFocusedChatStep(step);
     setIsMobileChatOpen(true);
@@ -276,8 +342,8 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
   return (
     <div className="flex h-screen overflow-hidden bg-canvas text-body">
       <section className="flex min-w-0 flex-1 flex-col">
-        <header className="z-30 flex h-14 shrink-0 items-center justify-between border-b border-hairline bg-canvas px-4">
-          <div className="flex min-w-0 items-center gap-3">
+        <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-hairline bg-canvas px-2 sm:px-4">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Button variant="ghost" size="icon" aria-label="Open navigation" onClick={() => setIsNavOpen(true)}>
               <Menu className="h-4 w-4" aria-hidden="true" />
             </Button>
@@ -294,7 +360,7 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
           <div className="flex items-center gap-2">
             <Badge className="hidden sm:inline-flex">{subjectLabel(canvas.subject)}</Badge>
             <SaveState status={saveStatus} />
-            <Button variant="secondary" size="sm" className="hidden sm:inline-flex" onClick={() => void saveCanvas()} disabled={saveStatus === "saving"}>
+            <Button variant="secondary" size="sm" className="hidden sm:inline-flex" onClick={() => void performSave()} disabled={saveStatus === "saving"}>
               {saveStatus === "saving" ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               ) : (
@@ -303,23 +369,27 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
               <span className="hidden sm:inline">{saveStatus === "saving" ? "Saving" : "Save"}</span>
             </Button>
             <CanvasShareControls canvasId={canvas.id} initialIsPublic={canvas.isPublic} shareSlug={canvas.shareSlug} />
-            <Button variant="secondary" size="sm" className="hidden sm:inline-flex" onClick={() => void handleExport("pdf")} disabled={isExporting}>
+            <Button variant="secondary" size="sm" className="hidden md:inline-flex" onClick={() => void handleExport("pdf")} disabled={isExporting}>
               {isExporting ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               ) : (
                 <Download className="h-4 w-4" aria-hidden="true" />
               )}
-              <span className="hidden sm:inline">PDF</span>
+              <span className="hidden md:inline">PDF</span>
             </Button>
-            <Button variant="secondary" size="sm" className="hidden sm:inline-flex" onClick={() => void handleExport("latex")} disabled={isExporting}>
+            <Button variant="secondary" size="sm" className="hidden md:inline-flex" onClick={() => void handleExport("latex")} disabled={isExporting}>
               {isExporting ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               ) : (
                 <Download className="h-4 w-4" aria-hidden="true" />
               )}
-              <span className="hidden sm:inline">LaTeX</span>
+              <span className="hidden md:inline">LaTeX</span>
             </Button>
-            <Button asChild variant="secondary" size="icon" aria-label="Account">
+            <Button size="sm" onClick={() => void handleSolve()} disabled={isSolving} aria-label="Solve">
+              {isSolving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+              <span className="hidden sm:inline">{isSolving ? "Solving" : "Solve"}</span>
+            </Button>
+            <Button asChild variant="secondary" size="icon" aria-label="Account" className="hidden sm:inline-flex">
               <Link href="/settings">
                 <UserCircle className="h-4 w-4" aria-hidden="true" />
               </Link>
@@ -341,28 +411,30 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
             </div>
           ) : null}
 
-          <div className="absolute left-[calc(22%+340px)] top-[calc(22%+18px)] z-20 hidden md:block">
-            <Button onClick={handleSolve} disabled={isSolving} className="pointer-events-auto">
-              {isSolving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
-              Solve selection
-            </Button>
-          </div>
-
           <div className="absolute right-5 top-5 z-20 w-[360px] max-w-[calc(100vw-2.5rem)] space-y-3">
+            {notice ? (
+              <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm leading-6 text-ink" role="status">
+                {notice}
+              </div>
+            ) : null}
             {activeSolution ? <SolutionCard solution={activeSolution} onAskStep={handleAskStep} /> : null}
             <div className="rounded-lg border border-hairline bg-canvas p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-ink">Solve status</p>
                   <p className="mt-1 text-xs text-muted">
-                    {lastSolvedAt ? `Last solved ${formatDateTime(lastSolvedAt)}` : "Select shapes or use the demo region."}
+                    {lastSolvedAt ? `Last solved ${formatDateTime(lastSolvedAt)}` : "Draw a problem, then press Solve."}
                   </p>
                 </div>
                 <VerificationBadge status={activeSolution?.verificationStatus ?? "unverifiable"} />
               </div>
               <div className="mt-3 flex items-center gap-2 text-xs text-muted">
                 <Crosshair className="h-3.5 w-3.5" aria-hidden="true" />
-                {regionMode === "selection" ? "Using selected canvas shapes" : "Using demo integral fallback"}
+                {regionMode === "selection"
+                  ? "Using selected canvas shapes"
+                  : regionMode === "viewport"
+                    ? "Using the visible canvas region"
+                    : "Select shapes, or press Solve to use the visible board"}
               </div>
             </div>
           </div>
@@ -403,6 +475,47 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
                 </Link>
               </Button>
             </nav>
+            <div className="mt-6 border-t border-hairline pt-4 sm:hidden">
+              <p className="text-xs font-medium uppercase text-muted">Canvas actions</p>
+              <div className="mt-3 flex flex-col gap-2">
+                <Button
+                  variant="secondary"
+                  className="justify-start"
+                  onClick={() => {
+                    setIsNavOpen(false);
+                    void performSave();
+                  }}
+                  disabled={saveStatus === "saving"}
+                >
+                  <Save className="mr-2 h-4 w-4" aria-hidden="true" />
+                  {saveStatus === "saving" ? "Saving..." : "Save now"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="justify-start"
+                  onClick={() => {
+                    setIsNavOpen(false);
+                    void handleExport("pdf");
+                  }}
+                  disabled={isExporting}
+                >
+                  <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Export PDF
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="justify-start"
+                  onClick={() => {
+                    setIsNavOpen(false);
+                    void handleExport("latex");
+                  }}
+                  disabled={isExporting}
+                >
+                  <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Export LaTeX
+                </Button>
+              </div>
+            </div>
           </div>
           <div className="flex-1" onClick={() => setIsNavOpen(false)} />
         </div>
@@ -420,57 +533,144 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
   );
 }
 
-async function captureSolveRegion(editor: Editor | null): Promise<{
-  regionBounds: RegionBounds | null;
-  snapshotBase64: string | null;
-  mimeType: string | null;
-  problemHint: string;
-}> {
-  const fallback = {
-    regionBounds: null,
-    snapshotBase64: null,
-    mimeType: null,
-    problemHint: "Evaluate the selected integral: integral x squared dx.",
+class SolveStreamError extends Error {
+  constructor(
+    message: string,
+    public code: string | null,
+  ) {
+    super(message);
+    this.name = "SolveStreamError";
+  }
+}
+
+function solveErrorMessage(error: unknown) {
+  if (error instanceof SolveStreamError) {
+    if (error.code === "quota_exceeded") {
+      return "Daily free solves are used up. Upgrade to Pro or wait for the next reset.";
+    }
+    if (error.code === "not_configured") {
+      return "The AI solver is not configured on this server yet.";
+    }
+    if (error.code === "upstream_failed" || error.code === "upstream_timeout") {
+      return "The AI solver is temporarily unavailable. Your quota was not used — try again.";
+    }
+    if (error.message) return error.message;
+  }
+
+  return "The solve request failed. Your quota was not used — try again.";
+}
+
+type SolveCapture =
+  | {
+      ok: true;
+      regionBounds: RegionBounds;
+      snapshotBase64: string;
+      mimeType: string;
+      problemHint: string;
+      source: "selection" | "viewport";
+    }
+  | { ok: false; reason: string };
+
+// Vision models do not need more than ~2MP of handwriting, and the snapshot
+// must stay under the 4MB request cap even for very large regions.
+const maxSnapshotPixels = 2_200_000;
+const maxSnapshotBytes = 3_400_000;
+
+async function captureSolveRegion(editor: Editor | null): Promise<SolveCapture> {
+  if (!editor) {
+    return { ok: false, reason: "The canvas is still loading. Try again in a moment." };
+  }
+
+  let shapeIds = [...editor.getSelectedShapeIds()];
+  let source: "selection" | "viewport" = "selection";
+
+  if (!shapeIds.length) {
+    // No explicit selection: solve everything visible in the viewport instead
+    // of failing — the most common flow is draw, then immediately hit Solve.
+    const viewport = editor.getViewportPageBounds();
+    shapeIds = [...editor.getCurrentPageShapeIds()].filter((id) => {
+      const bounds = editor.getShapePageBounds(id);
+      if (!bounds) return false;
+      return (
+        bounds.x < viewport.x + viewport.w &&
+        bounds.x + bounds.w > viewport.x &&
+        bounds.y < viewport.y + viewport.h &&
+        bounds.y + bounds.h > viewport.y
+      );
+    });
+    source = "viewport";
+  }
+
+  if (!shapeIds.length) {
+    return { ok: false, reason: "Draw or select a problem first, then press Solve." };
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const id of shapeIds) {
+    const bounds = editor.getShapePageBounds(id);
+    if (!bounds) continue;
+    minX = Math.min(minX, bounds.x);
+    minY = Math.min(minY, bounds.y);
+    maxX = Math.max(maxX, bounds.x + bounds.w);
+    maxY = Math.max(maxY, bounds.y + bounds.h);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+    return { ok: false, reason: "Could not measure the selected shapes. Try selecting them again." };
+  }
+
+  const regionBounds: RegionBounds = {
+    x: minX,
+    y: minY,
+    w: Math.max(1, maxX - minX),
+    h: Math.max(1, maxY - minY),
   };
 
-  if (!editor) return fallback;
+  const baseRatio = Math.min(
+    2,
+    Math.max(0.35, Math.sqrt(maxSnapshotPixels / (regionBounds.w * regionBounds.h))),
+  );
+  const problemHint =
+    source === "selection"
+      ? "Solve the selected whiteboard region."
+      : "Solve the STEM problem visible on this whiteboard.";
 
-  const selectedShapeIds = editor.getSelectedShapeIds();
-  const bounds = editor.getSelectionPageBounds();
+  for (const pixelRatio of [baseRatio, baseRatio / 2]) {
+    try {
+      // background: true renders strokes on the white canvas; transparent
+      // PNGs of dark ink are unreliable inputs for vision models.
+      const image = await editor.toImageDataUrl(shapeIds, {
+        background: true,
+        format: "png",
+        padding: 24,
+        pixelRatio,
+      });
 
-  if (!selectedShapeIds.length || !bounds) return fallback;
+      const estimatedBytes = Math.floor(image.url.length * 0.75);
 
-  try {
-    const image = await editor.toImageDataUrl(selectedShapeIds, {
-      background: false,
-      format: "png",
-      padding: 24,
-      pixelRatio: 2,
-    });
-
-    return {
-      regionBounds: {
-        x: bounds.x,
-        y: bounds.y,
-        w: bounds.w,
-        h: bounds.h,
-      },
-      snapshotBase64: image.url,
-      mimeType: "image/png",
-      problemHint: "Solve the selected whiteboard region.",
-    };
-  } catch {
-    return {
-      ...fallback,
-      regionBounds: {
-        x: bounds.x,
-        y: bounds.y,
-        w: bounds.w,
-        h: bounds.h,
-      },
-      problemHint: "Solve the selected whiteboard region.",
-    };
+      if (estimatedBytes <= maxSnapshotBytes) {
+        return {
+          ok: true,
+          regionBounds,
+          snapshotBase64: image.url,
+          mimeType: "image/png",
+          problemHint,
+          source,
+        };
+      }
+    } catch {
+      break;
+    }
   }
+
+  return {
+    ok: false,
+    reason: "This region is too large to snapshot. Zoom in or select a smaller part of the board.",
+  };
 }
 
 async function readSolveStream(
@@ -504,14 +704,26 @@ async function readSolveStream(
 
       if (!eventName || !dataLine) continue;
 
-      const payload = JSON.parse(dataLine) as {
+      let payload: {
         step_num?: number;
         latex?: string;
         explanation?: string;
         verified?: boolean;
         verification_status?: SolutionStep["verificationStatus"];
         solution?: Solution;
+        error?: string;
+        code?: string;
       };
+
+      try {
+        payload = JSON.parse(dataLine);
+      } catch {
+        continue;
+      }
+
+      if (eventName === "error") {
+        throw new SolveStreamError(payload.error ?? "Solve failed", payload.code ?? null);
+      }
 
       if (eventName === "step" && payload.step_num && payload.latex && payload.explanation) {
         handlers.onStep({
@@ -548,7 +760,7 @@ function SaveState({ status }: { status: SaveStatus }) {
     return (
       <Badge tone="danger">
         <FileWarning className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-        Save failed
+        Retrying save
       </Badge>
     );
   }

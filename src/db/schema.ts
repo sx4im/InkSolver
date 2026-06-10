@@ -60,6 +60,7 @@ export const solutions = pgTable("solutions", {
     .references(() => canvases.id, { onDelete: "cascade" }),
   regionBounds: jsonb("region_bounds"),
   promptImageUrl: text("prompt_image_url"),
+  subject: subjectEnum("subject").notNull().default("unknown"),
   problemText: text("problem_text").notNull(),
   steps: jsonb("steps").notNull(),
   finalAnswer: text("final_answer").notNull(),

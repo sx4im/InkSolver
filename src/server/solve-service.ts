@@ -1,5 +1,11 @@
 import type { RegionBounds, Solution } from "@/lib/types";
-import { appendSolution, assertCanSolve, getCanvas, recordSolveUsage } from "@/server/canvas-repository";
+import {
+  appendSolution,
+  getCanvas,
+  recordSolveUsage,
+  refundSolveQuota,
+  reserveSolveQuota,
+} from "@/server/canvas-repository";
 import { solveWithNvidia } from "@/server/nvidia-solver";
 import { storePromptSnapshot } from "@/server/snapshot-storage";
 import { verifySolution } from "@/server/verifier-client";
@@ -17,40 +23,59 @@ export async function solveCanvasSelection(request: SolveRequest): Promise<Solut
   const canvas = await getCanvas(request.canvasId);
   if (!canvas) return null;
 
-  await assertCanSolve();
+  // Reserve quota atomically before doing any expensive work; refund it if the
+  // solve fails so users are never charged for errors.
+  const user = await reserveSolveQuota();
 
-  const storedSnapshot = await storePromptSnapshot({
-    canvasId: canvas.id,
-    snapshotBase64: request.snapshotBase64,
-    mimeType: request.mimeType,
-  });
+  let solution: Solution;
 
-  const solveInput = {
-    canvasId: canvas.id,
-    regionBounds: request.regionBounds,
-    snapshotBase64: request.snapshotBase64,
-    mimeType: storedSnapshot?.mimeType ?? request.mimeType,
-    problemHint: request.problemHint,
-    promptImageUrl: storedSnapshot?.url ?? null,
-  };
+  try {
+    const storedSnapshot = await storePromptSnapshot({
+      canvasId: canvas.id,
+      snapshotBase64: request.snapshotBase64,
+      mimeType: request.mimeType,
+    });
 
-  const firstAttempt = await verifySolution(await solveWithNvidia(solveInput));
-  const solution =
-    firstAttempt.verificationStatus === "mismatch"
-      ? await verifySolution(
-          await solveWithNvidia({
-            ...solveInput,
-            verificationFeedback:
-              firstAttempt.verificationReason ??
-              "The previous answer failed symbolic verification. Re-solve and return a corrected final answer.",
-          }),
-        )
-      : firstAttempt;
+    const solveInput = {
+      canvasId: canvas.id,
+      regionBounds: request.regionBounds,
+      snapshotBase64: request.snapshotBase64,
+      mimeType: storedSnapshot?.mimeType ?? request.mimeType,
+      problemHint: request.problemHint,
+      promptImageUrl: storedSnapshot?.url ?? null,
+    };
+
+    const firstAttempt = await verifySolution(await solveWithNvidia(solveInput));
+
+    if (firstAttempt.verificationStatus === "mismatch") {
+      const retry = await verifySolution(
+        await solveWithNvidia({
+          ...solveInput,
+          verificationFeedback:
+            firstAttempt.verificationReason ??
+            "The previous answer failed symbolic verification. Re-solve and return a corrected final answer.",
+        }),
+      );
+
+      // Both model calls were paid for; report combined usage.
+      solution = {
+        ...retry,
+        tokensUsed: (firstAttempt.tokensUsed ?? 0) + (retry.tokensUsed ?? 0),
+        costUsd: Number(((firstAttempt.costUsd ?? 0) + (retry.costUsd ?? 0)).toFixed(6)),
+      };
+    } else {
+      solution = firstAttempt;
+    }
+  } catch (error) {
+    await refundSolveQuota(user).catch(() => null);
+    throw error;
+  }
 
   const persisted = await appendSolution(canvas.id, solution);
 
   if (persisted) {
     await recordSolveUsage({
+      user,
       solutionId: persisted.id,
       canvasId: persisted.canvasId,
       model: persisted.model,

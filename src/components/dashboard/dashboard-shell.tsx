@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   ArrowRight,
   CheckCircle2,
-  FileText,
   Gauge,
   LayoutGrid,
   Lock,
@@ -44,13 +43,13 @@ export function DashboardShell({ user, canvases }: DashboardShellProps) {
       <main className="mx-auto flex max-w-7xl flex-col gap-12 px-6 py-12">
         <section className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-end">
           <div className="max-w-3xl">
-            <Badge tone="dark">Phase 16 local beta</Badge>
+            <Badge tone="dark">Beta</Badge>
             <h1 className="mt-6 max-w-2xl text-[40px] font-normal leading-[1.2] text-ink">
               Draw the STEM problem. Solve it beside your work.
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-body">
-              InkSolver now covers the PRD workflow through solving, verification, follow-up chat,
-              quota enforcement, sharing, exports, readiness checks, and beta feedback capture.
+              Sketch equations, diagrams, or worked problems on an infinite canvas. InkSolver reads
+              your ink, returns verified step-by-step solutions, and answers follow-up questions.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <CreateCanvasButton title="Math practice canvas" subject="math" />
@@ -89,8 +88,8 @@ export function DashboardShell({ user, canvases }: DashboardShellProps) {
             ) : null}
             <div className="mt-6 grid grid-cols-3 gap-3">
               <Metric icon={LayoutGrid} label="Active canvases" value={canvasLimitLabel} />
-              <Metric icon={Gauge} label="Latency target" value="6s" />
-              <Metric icon={CheckCircle2} label="Verifier" value="Live" />
+              <Metric icon={Gauge} label="Solves today" value={String(user.problemsToday)} />
+              <Metric icon={CheckCircle2} label="Plan" value={user.plan === "pro" ? "Pro" : "Free"} />
             </div>
           </Surface>
         </section>
@@ -100,12 +99,8 @@ export function DashboardShell({ user, canvases }: DashboardShellProps) {
             <div className="mb-4 flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-normal leading-tight text-ink">Recent canvases</h2>
-                <p className="mt-1 text-sm text-muted">The dashboard shape from the PRD is in place.</p>
+                <p className="mt-1 text-sm text-muted">Pick up where you left off.</p>
               </div>
-              <Button variant="secondary">
-                <FileText className="h-4 w-4" aria-hidden="true" />
-                Import PDF
-              </Button>
             </div>
             {hasCanvases ? (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -161,12 +156,12 @@ export function DashboardShell({ user, canvases }: DashboardShellProps) {
           <Surface className="self-start bg-primary p-6 text-white">
             <h2 className="text-2xl font-normal leading-tight">Verification-first solving</h2>
             <p className="mt-4 leading-6 text-white/80">
-              The current build enforces free-plan limits, records solve/chat usage, and keeps billing
-              webhook handling ready for Lemon Squeezy production credentials.
+              Every answer is checked against a symbolic math engine. Steps that pass are marked
+              verified; anything the engine cannot confirm is flagged for review instead of hidden.
             </p>
             <Button asChild variant="dark" className="mt-6">
               <Link href={primaryCanvasHref}>
-                Open demo canvas
+                Open a canvas
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </Button>

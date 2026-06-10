@@ -70,7 +70,7 @@ export function CanvasShareControls({
   }
 
   return (
-    <div className="hidden items-center gap-2 sm:flex">
+    <div className="flex items-center gap-2">
       <Badge tone={isPublic ? "success" : state === "error" ? "danger" : "neutral"} className="hidden xl:inline-flex">
         {state === "error" ? "Share failed" : isPublic ? "Public" : "Private"}
       </Badge>

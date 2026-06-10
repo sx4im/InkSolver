@@ -13,7 +13,7 @@ const TldrawBoard = dynamic(() => import("@/components/canvas/tldraw-board").the
 type CanvasStageProps = {
   snapshot?: CanvasSnapshot | null;
   onEditorMount?: (editor: Editor) => void;
-  onDocumentChange?: (snapshot: CanvasSnapshot) => void;
+  onDocumentChange?: () => void;
   readOnly?: boolean;
 };
 

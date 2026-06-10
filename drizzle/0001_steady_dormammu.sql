@@ -1,0 +1,1 @@
+ALTER TABLE "solutions" ADD COLUMN "subject" "subject" DEFAULT 'unknown' NOT NULL;

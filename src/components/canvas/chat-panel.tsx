@@ -295,11 +295,22 @@ async function readChatStream(
 
       if (!eventName || !dataLine) continue;
 
-      const payload = JSON.parse(dataLine) as {
+      let payload: {
         token?: string;
         user_message?: ChatMessage;
         assistant_message?: ChatMessage;
+        error?: string;
       };
+
+      try {
+        payload = JSON.parse(dataLine);
+      } catch {
+        continue;
+      }
+
+      if (eventName === "error") {
+        throw new Error(payload.error ?? "Chat response could not be generated.");
+      }
 
       if (eventName === "token" && payload.token) {
         handlers.onToken(payload.token);

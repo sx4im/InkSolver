@@ -1,4 +1,5 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, lt, sql } from "drizzle-orm";
+import { after } from "next/server";
 
 import { getDb } from "@/db/client";
 import { canvases, chatMessages, embeddings, solutions, usageEvents, users } from "@/db/schema";
@@ -22,7 +23,6 @@ import type {
 import { getAuthenticatedUser, stableUuid } from "@/server/auth-context";
 import { readLocalState, updateLocalState } from "@/server/local-store";
 import { generateEmbedding } from "@/server/gemini-solver";
-import { isProductionRuntime } from "@/server/runtime-guards";
 
 type CanvasPatch = {
   title?: string;
@@ -156,7 +156,7 @@ function mapSolutionRow(row: typeof solutions.$inferSelect): Solution {
     regionBounds: row.regionBounds as Solution["regionBounds"],
     promptImageUrl: row.promptImageUrl,
     problemText: row.problemText,
-    subject: "unknown",
+    subject: row.subject,
     finalAnswer: row.finalAnswer,
     verificationStatus: row.verificationStatus,
     steps: row.steps as Solution["steps"],
@@ -193,6 +193,18 @@ function mapUserRow(row: typeof users.$inferSelect): UserAccount {
   });
 }
 
+async function countSolutionsForCanvas(canvasId: string) {
+  const db = getDb();
+  if (!db) return 0;
+
+  const [row] = await db
+    .select({ value: count() })
+    .from(solutions)
+    .where(eq(solutions.canvasId, canvasId));
+
+  return row?.value ?? 0;
+}
+
 async function resolveDbCanvas(identifier: string, userId?: string | null) {
   const db = getDb();
   if (!db) return null;
@@ -221,6 +233,14 @@ async function ensureCurrentDbUser() {
 
   const byId = await db.select().from(users).where(eq(users.id, authUser.id)).limit(1);
   if (byId[0]) {
+    const current = byId[0];
+    const profileChanged =
+      current.email !== authUser.email ||
+      current.name !== authUser.name ||
+      current.imageUrl !== (authUser.imageUrl ?? null);
+
+    if (!profileChanged) return current;
+
     const [updated] = await db
       .update(users)
       .set({
@@ -228,7 +248,7 @@ async function ensureCurrentDbUser() {
         name: authUser.name,
         imageUrl: authUser.imageUrl,
       })
-      .where(eq(users.id, byId[0].id))
+      .where(eq(users.id, current.id))
       .returning();
 
     return updated;
@@ -271,10 +291,13 @@ export async function getCurrentUser() {
           .where(eq(users.id, user.id));
       }
 
-      const canvasRows = await db.select().from(canvases).where(eq(canvases.userId, user.id));
+      const [canvasCount] = await db
+        .select({ value: count() })
+        .from(canvases)
+        .where(eq(canvases.userId, user.id));
       return {
         ...normalized,
-        activeCanvases: canvasRows.length,
+        activeCanvases: canvasCount?.value ?? 0,
       };
     }
   }
@@ -325,18 +348,17 @@ export async function listCanvases() {
 
   if (db) {
     const rows = await db
-      .select()
+      .select({
+        canvas: canvases,
+        solutionCount: count(solutions.id),
+      })
       .from(canvases)
+      .leftJoin(solutions, eq(solutions.canvasId, canvases.id))
       .where(eq(canvases.userId, user.id))
+      .groupBy(canvases.id)
       .orderBy(desc(canvases.updatedAt));
-    const solutionRows = await db.select().from(solutions);
 
-    return rows.map((canvas) =>
-      mapCanvasRow(
-        canvas,
-        solutionRows.filter((solution) => solution.canvasId === canvas.id).length,
-      ),
-    );
+    return rows.map((row) => mapCanvasRow(row.canvas, row.solutionCount));
   }
 
   const state = await readLocalState();
@@ -354,12 +376,7 @@ export async function getCanvas(identifier: string) {
     const canvas = await resolveDbCanvas(normalizedIdentifier, user.id);
     if (!canvas) return null;
 
-    const solutionRows = await db
-      .select()
-      .from(solutions)
-      .where(eq(solutions.canvasId, canvas.id));
-
-    return mapCanvasRow(canvas, solutionRows.length);
+    return mapCanvasRow(canvas, await countSolutionsForCanvas(canvas.id));
   }
 
   const state = await readLocalState();
@@ -381,12 +398,7 @@ export async function getCanvasBySlug(slug: string) {
     const [canvas] = await db.select().from(canvases).where(eq(canvases.shareSlug, slug)).limit(1);
     if (!canvas) return null;
 
-    const solutionRows = await db
-      .select()
-      .from(solutions)
-      .where(eq(solutions.canvasId, canvas.id));
-
-    return mapCanvasRow(canvas, solutionRows.length);
+    return mapCanvasRow(canvas, await countSolutionsForCanvas(canvas.id));
   }
 
   const state = await readLocalState();
@@ -401,12 +413,7 @@ async function getPublicCanvas(identifier: string) {
     const canvas = await resolveDbCanvas(normalizedIdentifier);
     if (!canvas || !canvas.isPublic) return null;
 
-    const solutionRows = await db
-      .select()
-      .from(solutions)
-      .where(eq(solutions.canvasId, canvas.id));
-
-    return mapCanvasRow(canvas, solutionRows.length);
+    return mapCanvasRow(canvas, await countSolutionsForCanvas(canvas.id));
   }
 
   const state = await readLocalState();
@@ -543,12 +550,7 @@ export async function updateCanvas(identifier: string, patch: CanvasPatch) {
       .where(eq(canvases.id, current.id))
       .returning();
 
-    const solutionRows = await db
-      .select()
-      .from(solutions)
-      .where(eq(solutions.canvasId, updated.id));
-
-    return mapCanvasRow(updated, solutionRows.length);
+    return mapCanvasRow(updated, await countSolutionsForCanvas(updated.id));
   }
 
   let updatedCanvas: CanvasDetail | null = null;
@@ -727,14 +729,85 @@ export async function appendChatMessage(input: {
 }
 
 
-export async function assertCanSolve() {
+export async function reserveSolveQuota(): Promise<UserAccount> {
   const user = await getCurrentUser();
+  const db = getDb();
+
+  if (db && isUuid(user.id)) {
+    const guard =
+      user.plan === "free"
+        ? and(eq(users.id, user.id), lt(users.problemsToday, user.dailyLimit))
+        : eq(users.id, user.id);
+    const rows = await db
+      .update(users)
+      .set({ problemsToday: sql`${users.problemsToday} + 1` })
+      .where(guard)
+      .returning({ problemsToday: users.problemsToday });
+
+    if (!rows.length) {
+      throw new QuotaExceededError({
+        ...user,
+        problemsToday: user.dailyLimit,
+        usageRemaining: 0,
+      });
+    }
+
+    return {
+      ...user,
+      problemsToday: rows[0].problemsToday,
+      usageRemaining: Math.max(0, user.dailyLimit - rows[0].problemsToday),
+    };
+  }
 
   if (user.plan === "free" && user.problemsToday >= user.dailyLimit) {
     throw new QuotaExceededError(user);
   }
 
-  return user;
+  const nextProblemsToday = user.problemsToday + 1;
+
+  await updateLocalState((state) => ({
+    ...state,
+    users: state.users.map((current) =>
+      current.id === user.id
+        ? normalizeUserAccount({
+            ...current,
+            problemsToday: nextProblemsToday,
+            resetAt: user.resetAt,
+          })
+        : current,
+    ),
+  }));
+
+  return {
+    ...user,
+    problemsToday: nextProblemsToday,
+    usageRemaining: Math.max(0, user.dailyLimit - nextProblemsToday),
+  };
+}
+
+export async function refundSolveQuota(user: UserAccount) {
+  const db = getDb();
+
+  if (db && isUuid(user.id)) {
+    await db
+      .update(users)
+      .set({ problemsToday: sql`greatest(${users.problemsToday} - 1, 0)` })
+      .where(eq(users.id, user.id));
+    return;
+  }
+
+  await updateLocalState((state) => ({
+    ...state,
+    users: state.users.map((current) =>
+      current.id === user.id
+        ? normalizeUserAccount({
+            ...current,
+            problemsToday: Math.max(0, current.problemsToday - 1),
+            resetAt: user.resetAt,
+          })
+        : current,
+    ),
+  }));
 }
 
 export async function recordUsageEvent(input: {
@@ -852,6 +925,7 @@ export async function getAccountExport() {
 }
 
 export async function recordSolveUsage(input: {
+  user: UserAccount;
   solutionId: string;
   canvasId: string;
   model?: string | null;
@@ -860,35 +934,8 @@ export async function recordSolveUsage(input: {
   durationMs?: number | null;
   verificationStatus?: VerificationStatus | null;
 }) {
-  const user = await getCurrentUser();
-  const nextProblemsToday = user.problemsToday + 1;
-  const db = getDb();
-
-  if (db && isUuid(user.id)) {
-    await db
-      .update(users)
-      .set({
-        problemsToday: nextProblemsToday,
-        resetAt: new Date(user.resetAt),
-      })
-      .where(eq(users.id, user.id));
-  } else {
-    await updateLocalState((state) => ({
-      ...state,
-      users: state.users.map((current) =>
-        current.id === user.id
-          ? normalizeUserAccount({
-              ...current,
-              problemsToday: nextProblemsToday,
-              resetAt: user.resetAt,
-            })
-          : current,
-      ),
-    }));
-  }
-
   await recordUsageEvent({
-    userId: user.id,
+    userId: input.user.id,
     eventType: "solve",
     costUsd: input.costUsd ?? 0,
     metadata: {
@@ -900,8 +947,6 @@ export async function recordSolveUsage(input: {
       verificationStatus: input.verificationStatus ?? null,
     },
   });
-
-  return getCurrentUser();
 }
 
 export async function updateUserPlan(input: {
@@ -913,12 +958,12 @@ export async function updateUserPlan(input: {
   const db = getDb();
   const normalizedUserId = input.userId ? stableUuid(input.userId) : null;
 
+  if (!normalizedUserId && !input.email) return null;
+
   if (db) {
     const userRows = normalizedUserId
       ? await db.select().from(users).where(eq(users.id, normalizedUserId)).limit(1)
-      : input.email
-        ? await db.select().from(users).where(eq(users.email, input.email)).limit(1)
-        : await db.select().from(users).limit(1);
+      : await db.select().from(users).where(eq(users.email, input.email!)).limit(1);
     const user = userRows[0];
     if (!user) return null;
 
@@ -947,11 +992,10 @@ export async function updateUserPlan(input: {
 
   await updateLocalState((state) => ({
     ...state,
-    users: state.users.map((user, index) => {
+    users: state.users.map((user) => {
       const matches =
         (normalizedUserId ? user.id === normalizedUserId : false) ||
-        (input.email ? user.email === input.email : false) ||
-        (!isProductionRuntime() && !input.userId && !input.email && index === 0);
+        (input.email ? user.email === input.email : false);
 
       if (!matches) return user;
 
@@ -1002,6 +1046,7 @@ export async function appendSolution(canvasIdentifier: string, solution: Solutio
         canvasId: canvas.id,
         regionBounds: nextSolution.regionBounds ?? null,
         promptImageUrl: nextSolution.promptImageUrl,
+        subject: nextSolution.subject,
         problemText: nextSolution.problemText,
         steps: nextSolution.steps,
         finalAnswer: nextSolution.finalAnswer,
@@ -1013,18 +1058,28 @@ export async function appendSolution(canvasIdentifier: string, solution: Solutio
       })
       .returning();
 
-    // Generate and store embedding for V1.5 semantic search
-    try {
-      const embeddingValues = await generateEmbedding(nextSolution.problemText);
-      if (embeddingValues && embeddingValues.length === 768) {
-        await db.insert(embeddings).values({
-          solutionId: created.id,
-          problemText: nextSolution.problemText,
-          embedding: embeddingValues,
-        });
+    // Generate and store the semantic-search embedding off the critical path so
+    // the solve response is not delayed by an extra model roundtrip.
+    const embeddingTask = (async () => {
+      try {
+        const embeddingValues = await generateEmbedding(nextSolution.problemText);
+        if (embeddingValues && embeddingValues.length === 768) {
+          await db.insert(embeddings).values({
+            solutionId: created.id,
+            problemText: nextSolution.problemText,
+            embedding: embeddingValues,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to generate/store embedding:", err);
       }
-    } catch (err) {
-      console.error("Failed to generate/store embedding:", err);
+    })();
+
+    try {
+      after(embeddingTask);
+    } catch {
+      // Outside a request scope (scripts/tests) there is no `after` lifecycle;
+      // the task still runs in the background.
     }
 
     return mapSolutionRow(created);

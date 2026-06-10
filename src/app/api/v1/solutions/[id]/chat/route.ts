@@ -61,7 +61,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               })}\n\n`,
             ),
           );
-          await new Promise((resolve) => setTimeout(resolve, 55));
         }
 
         controller.enqueue(

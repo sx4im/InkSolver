@@ -151,6 +151,7 @@ async function generateWithGemini(input: {
             maxOutputTokens: 360,
           },
         }),
+        signal: AbortSignal.timeout(30_000),
       },
     );
 

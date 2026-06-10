@@ -1,5 +1,3 @@
-import { promises as fs } from "fs";
-import path from "path";
 import zlib from "zlib";
 
 import type { CanvasDetail, Solution, UserAccount } from "@/lib/types";
@@ -10,13 +8,17 @@ type ExportFormat = "pdf" | "png" | "latex";
 type ExportResult = {
   canvasId: string;
   format: ExportFormat;
-  downloadUrl: string;
+  body: Buffer;
+  mimeType: string;
   filename: string;
   watermark: boolean;
-  status: "ready";
 };
 
-const exportRoot = path.join(process.cwd(), ".data", "exports");
+const exportMimeTypes: Record<ExportFormat, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  latex: "text/x-tex; charset=utf-8",
+};
 
 export async function createCanvasExport(input: {
   canvas: CanvasDetail;
@@ -25,21 +27,15 @@ export async function createCanvasExport(input: {
 }): Promise<ExportResult> {
   const user = await getCurrentUser();
   const watermark = user.plan !== "pro";
-  const timestamp = Date.now();
-  const extension = input.format;
-  const objectKey = path.join(input.canvas.id, `${timestamp}.${extension}`);
-  const filePath = path.join(exportRoot, objectKey);
+  const extension = input.format === "latex" ? "tex" : input.format;
   const filename = `${slugify(input.canvas.title)}.${extension}`;
 
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(
-    filePath,
+  const body =
     input.format === "pdf"
       ? renderPdf(input.canvas, input.solutions, user, watermark)
       : input.format === "latex"
         ? renderLatex(input.canvas, input.solutions, user, watermark)
-        : renderPngPreview(input.canvas, input.solutions, watermark),
-  );
+        : renderPngPreview(input.canvas, input.solutions, watermark);
 
   await recordUsageEvent({
     userId: user.id,
@@ -54,10 +50,10 @@ export async function createCanvasExport(input: {
   return {
     canvasId: input.canvas.id,
     format: input.format,
-    downloadUrl: `/local-exports/${objectKey.split(path.sep).join("/")}`,
+    body,
+    mimeType: exportMimeTypes[input.format],
     filename,
     watermark,
-    status: "ready",
   };
 }
 

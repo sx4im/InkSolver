@@ -123,14 +123,19 @@ async function createCanvas(headers, title, subject = "math", expect = 201) {
   });
 }
 
-async function expectDownload(downloadUrl, contentType) {
-  const { response } = await request("GET", downloadUrl, {
+async function expectExport(canvasId, headers, format, contentType) {
+  const { response } = await request("POST", `/api/v1/canvases/${canvasId}/export`, {
+    headers,
     expect: 200,
     json: false,
+    body: { format },
   });
   const actual = response.headers.get("content-type") ?? "";
   if (!actual.includes(contentType)) {
-    throw new Error(`${downloadUrl} expected ${contentType}, got ${actual}`);
+    throw new Error(`Export ${format} expected ${contentType}, got ${actual}`);
+  }
+  if (!response.headers.get("content-disposition")?.includes("attachment")) {
+    throw new Error(`Export ${format} did not return an attachment.`);
   }
 }
 
@@ -235,18 +240,8 @@ async function main() {
   });
   remember("public remix creates a private copied canvas");
 
-  const pdf = await request("POST", `/api/v1/canvases/${canvasId}/export`, {
-    headers: userA,
-    expect: 200,
-    body: { format: "pdf" },
-  });
-  const png = await request("POST", `/api/v1/canvases/${canvasId}/export`, {
-    headers: userA,
-    expect: 200,
-    body: { format: "png" },
-  });
-  await expectDownload(pdf.data.download_url, "application/pdf");
-  await expectDownload(png.data.download_url, "image/png");
+  await expectExport(canvasId, userA, "pdf", "application/pdf");
+  await expectExport(canvasId, userA, "png", "image/png");
   remember("PDF and PNG exports download");
 
   const accountExport = await request("GET", "/api/v1/account/export", {
@@ -307,13 +302,18 @@ async function main() {
   for (let index = 0; index < 10; index += 1) {
     await solve(quotaCanvas.data.canvas_id, quotaUser, `Quota solve ${index + 1}`);
   }
-  await request("POST", `/api/v1/canvases/${quotaCanvas.data.canvas_id}/solve`, {
+  const { text: quotaText } = await request("POST", `/api/v1/canvases/${quotaCanvas.data.canvas_id}/solve`, {
     headers: quotaUser,
-    expect: 402,
+    expect: 200,
+    json: false,
     body: {
       problem_hint: "This should hit quota.",
     },
   });
+  const quotaPayload = parseSseDone(quotaText, "quota solve");
+  if (quotaPayload.code !== "quota_exceeded") {
+    throw new Error(`Expected quota_exceeded SSE error, got: ${JSON.stringify(quotaPayload)}`);
+  }
   remember("free solve quota returns upgrade-shaped block");
 
   const rateUser = identity("rate", 17);

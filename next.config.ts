@@ -14,8 +14,10 @@ const securityHeaders = [
     value: "strict-origin-when-cross-origin",
   },
   {
+    // microphone=(self) keeps the chat panel's voice input working while still
+    // denying it to embedded third-party content.
     key: "Permissions-Policy",
-    value: "camera=(), geolocation=(), microphone=()",
+    value: "camera=(), geolocation=(), microphone=(self)",
   },
   ...(process.env.NODE_ENV === "production"
     ? [
