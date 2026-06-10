@@ -1,13 +1,33 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { createCanvasExport } from "@/server/export-service";
+import { createCanvasExport, type CanvasImageAttachment } from "@/server/export-service";
 import { getCanvas, getSolutionsForCanvas } from "@/server/canvas-repository";
-import { enforceRateLimit, parseGuardedJson, requestBodyLimits } from "@/server/request-guards";
+import {
+  enforceRateLimit,
+  parseGuardedJson,
+  requestBodyLimits,
+  validateSnapshotImage,
+} from "@/server/request-guards";
 
 const exportSchema = z.object({
   format: z.enum(["pdf", "png", "latex"]),
+  canvas_image_b64: z.string().max(requestBodyLimits.export).nullable().optional(),
 });
+
+function decodeCanvasImage(value: string | null | undefined): CanvasImageAttachment | null {
+  if (!value) return null;
+
+  const dataUrlMatch = value.match(/^data:([^;,]+);base64,([\s\S]*)$/);
+  const payload = (dataUrlMatch?.[2] ?? value).replace(/\s/g, "");
+  const mimeType = (dataUrlMatch?.[1] ?? "image/png").toLowerCase();
+
+  try {
+    return { data: Buffer.from(payload, "base64"), mimeType };
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,6 +47,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!parsedBody.ok) return parsedBody.response;
 
   const body = parsedBody.data;
+  const imageError = await validateSnapshotImage({
+    route: "export",
+    snapshotBase64: body.canvas_image_b64,
+  });
+
+  if (imageError) return imageError;
+
   const canvas = await getCanvas(id);
 
   if (!canvas) {
@@ -37,6 +64,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     canvas,
     solutions: await getSolutionsForCanvas(canvas.id),
     format: body.format,
+    canvasImage: decodeCanvasImage(body.canvas_image_b64),
   });
 
   // Return the file directly: no dependency on instance-local disk, which does

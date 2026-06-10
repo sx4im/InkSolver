@@ -20,6 +20,7 @@ import type { Editor } from "tldraw";
 
 import { CanvasStage } from "@/components/canvas/canvas-stage";
 import { CanvasShareControls } from "@/components/canvas/canvas-share-controls";
+import { Latex } from "@/components/math/latex";
 import { ChatPanel } from "@/components/canvas/chat-panel";
 import { placeSolutionOnCanvas } from "@/components/canvas/place-solution-on-canvas";
 import { SolutionCard } from "@/components/canvas/solution-card";
@@ -44,6 +45,33 @@ const maxSaveRetryDelayMs = 30_000;
 // fetch keepalive bodies are capped around 64KB by browsers; larger snapshots
 // rely on the beforeunload prompt plus the regular debounced autosave.
 const keepaliveFlushLimitBytes = 60_000;
+const compressSaveThresholdBytes = 50_000;
+
+// Gzip large snapshots before upload: tldraw JSON compresses roughly 10x,
+// which keeps big boards fast on slow connections and under body limits.
+async function encodeSavePayload(json: string): Promise<{ body: BodyInit; headers: Record<string, string> }> {
+  if (typeof CompressionStream !== "undefined" && json.length > compressSaveThresholdBytes) {
+    try {
+      const stream = new Blob([json]).stream().pipeThrough(new CompressionStream("gzip"));
+      const compressed = await new Response(stream).arrayBuffer();
+
+      return {
+        body: compressed,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Inksolver-Encoding": "gzip",
+        },
+      };
+    } catch {
+      // Fall back to plain JSON below.
+    }
+  }
+
+  return {
+    body: json,
+    headers: { "Content-Type": "application/json" },
+  };
+}
 
 export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: CanvasWorkspaceProps) {
   const [solutions, setSolutions] = useState(initialSolutions);
@@ -96,14 +124,12 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
     try {
       // Serialize at send time so the request always carries the latest state.
       const snapshot = editor.getSnapshot();
+      const json = JSON.stringify({ tldraw_state: snapshot });
+      const { body, headers } = await encodeSavePayload(json);
       const response = await fetch(`/api/v1/canvases/${canvas.id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          tldraw_state: snapshot,
-        }),
+        headers,
+        body,
       });
 
       if (!response.ok) {
@@ -256,9 +282,30 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
             ),
           );
         },
+        onStatus(state) {
+          const statusText =
+            state === "verifying"
+              ? "Verifying..."
+              : state === "retrying"
+                ? "Re-solving after a verification mismatch..."
+                : state === "cached"
+                  ? "Matched an earlier verified solve..."
+                  : "Solving...";
+
+          setSolutions((current) =>
+            current.map((solution) =>
+              solution.id === pendingSolution.id && solution.steps.length === 0
+                ? { ...solution, finalAnswer: statusText }
+                : solution,
+            ),
+          );
+        },
         onDone(solution) {
           const placed = placeSolutionOnCanvas(editorRef.current, solution);
-          setSolutions((current) => [solution, ...current.filter((item) => item.id !== pendingSolution.id)]);
+          setSolutions((current) => [
+            solution,
+            ...current.filter((item) => item.id !== pendingSolution.id && item.id !== solution.id),
+          ]);
           setLastSolvedAt(solution.createdAt);
 
           if (placed) {
@@ -282,12 +329,16 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
     setIsExporting(true);
 
     try {
+      // PDF embeds JPEG bytes directly; PNG exports serve the capture as-is.
+      const canvasImage =
+        format === "latex" ? null : await captureCanvasImage(editorRef.current, format === "pdf" ? "jpeg" : "png");
+
       const response = await fetch(`/api/v1/canvases/${canvas.id}/export`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ format }),
+        body: JSON.stringify({ format, canvas_image_b64: canvasImage }),
       });
 
       if (!response.ok) {
@@ -321,13 +372,35 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
       return;
     }
 
+    setFocusedChatStep(null);
+
     if (activeSolutionId === initialChatSolutionIdRef.current) {
       setChatMessagesForActive(chatMessages.filter((message) => !message.solutionId || message.solutionId === activeSolutionId));
-    } else {
-      setChatMessagesForActive([]);
+      return;
     }
 
-    setFocusedChatStep(null);
+    setChatMessagesForActive([]);
+
+    // Streaming placeholders never have persisted chat history.
+    if (activeSolutionId.startsWith("pending_")) return;
+
+    let cancelled = false;
+
+    void fetch(`/api/v1/solutions/${activeSolutionId}/chat`)
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as { messages?: ChatMessage[] };
+      })
+      .then((payload) => {
+        if (!cancelled && payload?.messages?.length) {
+          setChatMessagesForActive(payload.messages);
+        }
+      })
+      .catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeSolutionId, chatMessages]);
 
   function handleEditorMount(editor: Editor) {
@@ -405,7 +478,9 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
           />
           {showDemoPrompt ? (
             <div className="pointer-events-none absolute left-[22%] top-[22%] z-10 hidden w-[320px] rounded-lg border border-hairline bg-white/95 p-5 shadow-button md:block">
-              <p className="font-hand text-4xl leading-none text-ink">{"\\int x^2 dx"}</p>
+              <p className="text-3xl leading-none text-ink">
+                <Latex value={"\\int x^2\\,dx"} display />
+              </p>
               <div className="mt-5 h-2 w-3/4 rounded-full bg-ink/15" />
               <div className="mt-2 h-2 w-1/2 rounded-full bg-ink/15" />
             </div>
@@ -576,6 +651,55 @@ type SolveCapture =
 const maxSnapshotPixels = 2_200_000;
 const maxSnapshotBytes = 3_400_000;
 
+// Captures every shape on the current page as an image of the real board for
+// exports. Returns null on an empty canvas so the server falls back to a
+// text-only document.
+async function captureCanvasImage(editor: Editor | null, format: "png" | "jpeg"): Promise<string | null> {
+  if (!editor) return null;
+
+  const shapeIds = [...editor.getCurrentPageShapeIds()];
+  if (!shapeIds.length) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const id of shapeIds) {
+    const bounds = editor.getShapePageBounds(id);
+    if (!bounds) continue;
+    minX = Math.min(minX, bounds.x);
+    minY = Math.min(minY, bounds.y);
+    maxX = Math.max(maxX, bounds.x + bounds.w);
+    maxY = Math.max(maxY, bounds.y + bounds.h);
+  }
+
+  if (!Number.isFinite(minX)) return null;
+
+  const area = Math.max(1, (maxX - minX) * (maxY - minY));
+  const baseRatio = Math.min(2, Math.max(0.3, Math.sqrt(maxSnapshotPixels / area)));
+
+  for (const pixelRatio of [baseRatio, baseRatio / 2]) {
+    try {
+      const image = await editor.toImageDataUrl(shapeIds, {
+        background: true,
+        format,
+        padding: 32,
+        pixelRatio,
+        quality: 0.85,
+      });
+
+      if (Math.floor(image.url.length * 0.75) <= maxSnapshotBytes) {
+        return image.url;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 async function captureSolveRegion(editor: Editor | null): Promise<SolveCapture> {
   if (!editor) {
     return { ok: false, reason: "The canvas is still loading. Try again in a moment." };
@@ -677,6 +801,7 @@ async function readSolveStream(
   body: ReadableStream<Uint8Array>,
   handlers: {
     onStep: (step: SolutionStep) => void;
+    onStatus?: (state: string) => void;
     onDone: (solution: Solution) => void;
   },
 ) {
@@ -713,6 +838,7 @@ async function readSolveStream(
         solution?: Solution;
         error?: string;
         code?: string;
+        state?: string;
       };
 
       try {
@@ -723,6 +849,10 @@ async function readSolveStream(
 
       if (eventName === "error") {
         throw new SolveStreamError(payload.error ?? "Solve failed", payload.code ?? null);
+      }
+
+      if (eventName === "status" && payload.state) {
+        handlers.onStatus?.(payload.state);
       }
 
       if (eventName === "step" && payload.step_num && payload.latex && payload.explanation) {

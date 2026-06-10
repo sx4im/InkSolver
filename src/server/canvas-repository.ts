@@ -1026,7 +1026,42 @@ export async function updateUserPlan(input: {
   return updatedUser;
 }
 
-export async function appendSolution(canvasIdentifier: string, solution: Solution) {
+export async function findCachedSolution(canvasId: string, snapshotHash: string) {
+  const db = getDb();
+
+  if (db && isUuid(canvasId)) {
+    const [row] = await db
+      .select()
+      .from(solutions)
+      .where(
+        and(
+          eq(solutions.canvasId, canvasId),
+          eq(solutions.snapshotHash, snapshotHash),
+          eq(solutions.verificationStatus, "verified"),
+        ),
+      )
+      .orderBy(desc(solutions.createdAt))
+      .limit(1);
+
+    return row ? mapSolutionRow(row) : null;
+  }
+
+  const state = await readLocalState();
+  return (
+    state.solutions.find(
+      (solution) =>
+        solution.canvasId === canvasId &&
+        (solution as Solution & { snapshotHash?: string | null }).snapshotHash === snapshotHash &&
+        solution.verificationStatus === "verified",
+    ) ?? null
+  );
+}
+
+export async function appendSolution(
+  canvasIdentifier: string,
+  solution: Solution,
+  options: { snapshotHash?: string | null } = {},
+) {
   const canvas = await getCanvas(canvasIdentifier);
   if (!canvas) return null;
 
@@ -1054,6 +1089,7 @@ export async function appendSolution(canvasIdentifier: string, solution: Solutio
         model: nextSolution.model ?? "unknown",
         tokensUsed: nextSolution.tokensUsed ?? 0,
         costUsd: String(nextSolution.costUsd ?? 0),
+        snapshotHash: options.snapshotHash ?? null,
         createdAt: new Date(nextSolution.createdAt),
       })
       .returning();
@@ -1085,9 +1121,14 @@ export async function appendSolution(canvasIdentifier: string, solution: Solutio
     return mapSolutionRow(created);
   }
 
+  const storedSolution = {
+    ...nextSolution,
+    snapshotHash: options.snapshotHash ?? null,
+  } as Solution;
+
   await updateLocalState((state) => ({
     ...state,
-    solutions: [nextSolution, ...state.solutions],
+    solutions: [storedSolution, ...state.solutions],
   }));
 
   return nextSolution;

@@ -68,10 +68,12 @@ export const solutions = pgTable("solutions", {
   model: text("model").notNull(),
   tokensUsed: integer("tokens_used").notNull().default(0),
   costUsd: numeric("cost_usd", { precision: 10, scale: 4 }).notNull().default("0"),
+  snapshotHash: text("snapshot_hash"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => {
   return {
     canvasCreatedIdx: index("solutions_canvas_created_idx").on(table.canvasId, table.createdAt),
+    canvasSnapshotIdx: index("solutions_canvas_snapshot_idx").on(table.canvasId, table.snapshotHash),
   };
 });
 

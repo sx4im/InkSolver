@@ -45,6 +45,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     fallback: {},
     maxBytes: requestBodyLimits.canvasPatch,
     route: "canvas_patch",
+    // Gzipped snapshots keep large boards under platform body limits while
+    // allowing substantially more drawing data once decompressed.
+    gzip: { maxDecompressedBytes: 24 * 1024 * 1024 },
   });
 
   if (!parsedBody.ok) return parsedBody.response;

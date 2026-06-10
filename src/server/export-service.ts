@@ -20,22 +20,36 @@ const exportMimeTypes: Record<ExportFormat, string> = {
   latex: "text/x-tex; charset=utf-8",
 };
 
+export type CanvasImageAttachment = {
+  data: Buffer;
+  mimeType: string;
+};
+
 export async function createCanvasExport(input: {
   canvas: CanvasDetail;
   solutions: Solution[];
   format: ExportFormat;
+  canvasImage?: CanvasImageAttachment | null;
 }): Promise<ExportResult> {
   const user = await getCurrentUser();
   const watermark = user.plan !== "pro";
   const extension = input.format === "latex" ? "tex" : input.format;
   const filename = `${slugify(input.canvas.title)}.${extension}`;
 
-  const body =
-    input.format === "pdf"
-      ? renderPdf(input.canvas, input.solutions, user, watermark)
-      : input.format === "latex"
-        ? renderLatex(input.canvas, input.solutions, user, watermark)
-        : renderPngPreview(input.canvas, input.solutions, watermark);
+  let body: Buffer;
+  let mimeType = exportMimeTypes[input.format];
+
+  if (input.format === "pdf") {
+    body = renderPdf(input.canvas, input.solutions, user, watermark, input.canvasImage ?? null);
+  } else if (input.format === "latex") {
+    body = renderLatex(input.canvas, input.solutions, user, watermark);
+  } else if (input.canvasImage) {
+    // The client captured the real board; serve it as the export.
+    body = input.canvasImage.data;
+    mimeType = input.canvasImage.mimeType;
+  } else {
+    body = renderPngPreview(input.canvas, input.solutions, watermark);
+  }
 
   await recordUsageEvent({
     userId: user.id,
@@ -44,6 +58,7 @@ export async function createCanvasExport(input: {
       canvasId: input.canvas.id,
       format: input.format,
       watermark,
+      includesCanvasImage: Boolean(input.canvasImage),
     },
   });
 
@@ -51,7 +66,7 @@ export async function createCanvasExport(input: {
     canvasId: input.canvas.id,
     format: input.format,
     body,
-    mimeType: exportMimeTypes[input.format],
+    mimeType,
     filename,
     watermark,
   };
@@ -97,7 +112,13 @@ function renderLatex(canvas: CanvasDetail, solutions: Solution[], user: UserAcco
   return Buffer.from(lines.join("\n"), "utf-8");
 }
 
-function renderPdf(canvas: CanvasDetail, solutions: Solution[], user: UserAccount, watermark: boolean) {
+function renderPdf(
+  canvas: CanvasDetail,
+  solutions: Solution[],
+  user: UserAccount,
+  watermark: boolean,
+  canvasImage: CanvasImageAttachment | null,
+) {
   const lines = [
     "InkSolver Export",
     canvas.title,
@@ -115,7 +136,7 @@ function renderPdf(canvas: CanvasDetail, solutions: Solution[], user: UserAccoun
     watermark ? "Generated with InkSolver free share" : "Generated with InkSolver Pro",
   ];
 
-  const content = [
+  const textContent = [
     "BT",
     "/F1 18 Tf",
     "72 760 Td",
@@ -128,35 +149,121 @@ function renderPdf(canvas: CanvasDetail, solutions: Solution[], user: UserAccoun
     .filter(Boolean)
     .join("\n");
 
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
-  ];
+  // PDFs can embed JPEG bytes directly via DCTDecode; PNG would require
+  // re-encoding the pixel data, so the client captures the board as JPEG.
+  const jpeg = canvasImage?.mimeType === "image/jpeg" ? canvasImage.data : null;
+  const dimensions = jpeg ? jpegDimensions(jpeg) : null;
 
-  return Buffer.from(buildPdf(objects));
+  if (!jpeg || !dimensions) {
+    return buildPdf([
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      pdfStream("", Buffer.from(textContent)),
+    ]);
+  }
+
+  const margin = 56;
+  const maxWidth = 612 - margin * 2;
+  const maxHeight = 640;
+  const scale = Math.min(maxWidth / dimensions.width, maxHeight / dimensions.height);
+  const drawWidth = Math.max(1, Math.floor(dimensions.width * scale));
+  const drawHeight = Math.max(1, Math.floor(dimensions.height * scale));
+  const imageY = 728 - drawHeight;
+
+  const imagePageContent = [
+    "BT",
+    "/F1 18 Tf",
+    `${margin} 752 Td`,
+    `(${escapePdf((canvas.title || "InkSolver canvas").slice(0, 80))}) Tj`,
+    "ET",
+    "BT",
+    "/F1 10 Tf",
+    `${margin} 736 Td`,
+    `(${escapePdf(`Subject: ${canvas.subject}  |  Updated: ${new Date(canvas.updatedAt).toLocaleString("en")}`)}) Tj`,
+    "ET",
+    "q",
+    `${drawWidth} 0 0 ${drawHeight} ${margin} ${imageY} cm`,
+    "/Im1 Do",
+    "Q",
+  ].join("\n");
+
+  return buildPdf([
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 7 0 R >> >> /Contents 6 0 R >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 8 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    pdfStream("", Buffer.from(imagePageContent)),
+    pdfStream(
+      `/Type /XObject /Subtype /Image /Width ${dimensions.width} /Height ${dimensions.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`,
+      jpeg,
+    ),
+    pdfStream("", Buffer.from(textContent)),
+  ]);
 }
 
-function buildPdf(objects: string[]) {
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
+function pdfStream(dict: string, data: Buffer) {
+  return Buffer.concat([
+    Buffer.from(`<< ${dict ? `${dict} ` : ""}/Length ${data.length} >>\nstream\n`),
+    data,
+    Buffer.from("\nendstream"),
+  ]);
+}
+
+function jpegDimensions(buffer: Buffer): { width: number; height: number } | null {
+  if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+
+  let offset = 2;
+
+  while (offset + 9 < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const marker = buffer[offset + 1];
+
+    // SOF0-SOF15 frames carry dimensions, except DHT (C4), JPG (C8), DAC (CC).
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return {
+        height: buffer.readUInt16BE(offset + 5),
+        width: buffer.readUInt16BE(offset + 7),
+      };
+    }
+
+    const segmentLength = buffer.readUInt16BE(offset + 2);
+    if (segmentLength < 2) return null;
+    offset += 2 + segmentLength;
+  }
+
+  return null;
+}
+
+function buildPdf(objects: Array<Buffer | string>) {
+  const header = Buffer.from("%PDF-1.4\n");
+  const chunks: Buffer[] = [header];
+  const offsets: number[] = [];
+  let position = header.length;
 
   objects.forEach((object, index) => {
-    offsets.push(Buffer.byteLength(pdf));
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    offsets.push(position);
+    const objectBuffer = Buffer.concat([
+      Buffer.from(`${index + 1} 0 obj\n`),
+      Buffer.isBuffer(object) ? object : Buffer.from(object),
+      Buffer.from("\nendobj\n"),
+    ]);
+    chunks.push(objectBuffer);
+    position += objectBuffer.length;
   });
 
-  const xrefOffset = Buffer.byteLength(pdf);
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  pdf += offsets
-    .slice(1)
-    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
-    .join("");
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  xref += offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("");
+  xref += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${position}\n%%EOF\n`;
+  chunks.push(Buffer.from(xref));
 
-  return pdf;
+  return Buffer.concat(chunks);
 }
 
 function renderPngPreview(canvas: CanvasDetail, solutions: Solution[], watermark: boolean) {

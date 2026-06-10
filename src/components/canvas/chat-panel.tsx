@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Loader2, MessageSquare, Send, X, Mic } from "lucide-react";
 
 import { VerificationBadge } from "@/components/canvas/verification-badge";
+import { Latex } from "@/components/math/latex";
 import { Button } from "@/components/ui/button";
 import type { ChatMessage, Solution, SolutionStep } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -189,7 +190,9 @@ export function ChatPanel({
         </div>
         {solution ? (
           <div className="mt-3 rounded-md border border-hairline bg-surface-soft p-3">
-            <p className="truncate font-hand text-xl leading-6 text-ink">{solution.finalAnswer}</p>
+            <p className="truncate text-base leading-6 text-ink">
+              <Latex value={solution.finalAnswer} />
+            </p>
             <div className="mt-2 flex items-center justify-between gap-2">
               <span className="truncate text-xs text-muted">{focusedStep ? `Step ${focusedStep.stepNum}` : "Current solution"}</span>
               <VerificationBadge status={focusedStep?.verificationStatus ?? solution.verificationStatus} compact />
@@ -198,7 +201,9 @@ export function ChatPanel({
         ) : null}
         {focusedStep ? (
           <div className="mt-3 flex items-center justify-between gap-2 rounded-sm border border-info-border/30 bg-canvas px-3 py-2 text-xs text-muted">
-            <span className="min-w-0 truncate">Step {focusedStep.stepNum}: {focusedStep.latex}</span>
+            <span className="min-w-0 truncate">
+              Step {focusedStep.stepNum}: <Latex value={focusedStep.latex} />
+            </span>
             <button
               type="button"
               className="shrink-0 rounded-full p-1 text-ink active:bg-surface-soft"

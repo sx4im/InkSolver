@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { getChatMessagesForSolution, getSolution } from "@/server/canvas-repository";
 import { chunkAnswer, createFollowUpResponse, resolveFollowUpContext } from "@/server/chat-service";
 import { captureException } from "@/server/observability";
 import { enforceRateLimit, parseGuardedJson, requestBodyLimits } from "@/server/request-guards";
@@ -10,6 +11,17 @@ const chatSchema = z.object({
   message: z.string().trim().min(1).max(1200),
   step_num: z.number().int().positive().nullable().optional(),
 });
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const solution = await getSolution(id);
+
+  if (!solution) {
+    return Response.json({ error: "Solution not found" }, { status: 404 });
+  }
+
+  return Response.json({ messages: await getChatMessagesForSolution(solution.id) });
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

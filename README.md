@@ -14,12 +14,14 @@ Draw equations, diagrams, or math problems on an infinite canvas — InkSolver u
 ## Features
 
 - **Infinite Canvas** — Powered by [tldraw](https://tldraw.com/), draw freely with pen, shapes, text, and images
-- **AI-Powered Solving** — Select any region and get step-by-step solutions using NVIDIA NIM (StepFun vision model)
+- **AI-Powered Solving** — Select a region (or just press Solve for the visible board) and watch step-by-step solutions stream in live from NVIDIA NIM (StepFun vision model)
 - **STEM-Focused** — Math, Physics, and Chemistry problem recognition
-- **LaTeX Export** — Download solutions as PDF or LaTeX
+- **Rendered Math** — Solutions display as typeset KaTeX, not raw LaTeX strings
+- **Real Exports** — Download a PDF embedding your actual board plus the worked solutions, the raw board as PNG, or LaTeX source
 - **Public Sharing** — Publish read-only canvases with link previews, and let others remix them
 - **Chat Assistant** — Ask follow-up questions about any solution step
-- **Verification Engine** — Symbolic verification via SymPy to catch errors
+- **Verification Engine** — Symbolic verification via SymPy; mismatched answers trigger an automatic re-solve, and byte-identical re-solves of verified work are served from cache without spending quota
+- **Resilient Autosave** — Debounced, gzip-compressed saves with retry/backoff, reconnect handling, and unsaved-work warnings
 
 ## Tech Stack
 

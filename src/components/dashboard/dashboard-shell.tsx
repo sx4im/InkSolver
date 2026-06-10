@@ -11,6 +11,7 @@ import {
 
 import { AppHeader } from "@/components/app-header";
 import { CreateCanvasButton } from "@/components/dashboard/create-canvas-button";
+import { Latex } from "@/components/math/latex";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
@@ -113,7 +114,9 @@ export function DashboardShell({ user, canvases }: DashboardShellProps) {
                     <Surface className="overflow-hidden transition-colors group-active:bg-surface-soft">
                       <div className={cn("canvas-grid flex aspect-[4/3] items-center justify-center p-6", thumbnailToneClass[canvas.thumbnailTone])}>
                         <div className="w-full rounded-md bg-white/90 p-4 text-ink">
-                          <p className="font-hand text-3xl leading-none">{canvas.subject === "physics" ? "v² = u² + 2as" : "\\int x^2 dx"}</p>
+                          <p className="text-2xl leading-none">
+                            <Latex value={canvas.subject === "physics" ? "v^2 = u^2 + 2as" : "\\int x^2\\,dx"} />
+                          </p>
                           <div className="mt-5 h-2 w-2/3 rounded-full bg-ink/20" />
                           <div className="mt-2 h-2 w-1/2 rounded-full bg-ink/20" />
                         </div>

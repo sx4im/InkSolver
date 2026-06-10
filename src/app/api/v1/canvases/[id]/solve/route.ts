@@ -12,6 +12,8 @@ import {
 import { solveCanvasSelection } from "@/server/solve-service";
 
 export const dynamic = "force-dynamic";
+// Solve + verify + one retry can take most of a minute on complex diagrams.
+export const maxDuration = 60;
 
 const coordinateSchema = z.number().finite().min(-1_000_000).max(1_000_000);
 const sizeSchema = z.number().finite().positive().max(200_000);
@@ -87,13 +89,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }, 10_000);
 
       try {
-        const solution = await solveCanvasSelection({
-          canvasId: id,
-          regionBounds: body.region_bounds ?? null,
-          snapshotBase64: body.snapshot_b64,
-          mimeType: body.mime_type,
-          problemHint: body.problem_hint,
-        });
+        const solution = await solveCanvasSelection(
+          {
+            canvasId: id,
+            regionBounds: body.region_bounds ?? null,
+            snapshotBase64: body.snapshot_b64,
+            mimeType: body.mime_type,
+            problemHint: body.problem_hint,
+          },
+          {
+            // Relay model output live: each step is forwarded the moment the
+            // model finishes writing it, then verification statuses arrive
+            // with the final `done` payload.
+            onStep(step) {
+              send("step", {
+                step_num: step.stepNum,
+                latex: step.latex,
+                explanation: step.explanation,
+                verified: false,
+                verification_status: "unverifiable",
+              });
+            },
+            onStatus(state) {
+              send("status", { state });
+            },
+          },
+        );
 
         if (!solution) {
           send("error", { error: "Canvas not found", code: "not_found" });

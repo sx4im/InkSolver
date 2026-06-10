@@ -25,6 +25,16 @@ type SolveInput = {
   verificationFeedback?: string | null;
 };
 
+export type StreamedStep = {
+  stepNum: number;
+  latex: string;
+  explanation: string;
+};
+
+export type SolveHooks = {
+  onStep?: (step: StreamedStep) => void;
+};
+
 export type SolverErrorCode =
   | "not_configured"
   | "missing_snapshot"
@@ -87,28 +97,33 @@ function toSolution(
   };
 }
 
-function mockSolve(input: SolveInput): Solution {
+function mockSolve(input: SolveInput, hooks?: SolveHooks): Solution {
   const problemText = input.problemHint?.trim() || "Evaluate the selected integral.";
+  const steps = [
+    {
+      latex: "\\int x^2\\,dx",
+      explanation: "Read the selected expression as a power-rule integral.",
+    },
+    {
+      latex: "\\frac{x^{2+1}}{2+1}+C",
+      explanation: "Increase the exponent by one and divide by the new exponent.",
+    },
+    {
+      latex: "\\frac{x^3}{3}+C",
+      explanation: "Simplify and keep the constant of integration.",
+    },
+  ];
+
+  steps.forEach((step, index) => {
+    hooks?.onStep?.({ stepNum: index + 1, latex: step.latex, explanation: step.explanation });
+  });
 
   return toSolution(
     input,
     {
       subject: "math",
       problem_text: problemText,
-      steps: [
-        {
-          latex: "\\int x^2\\,dx",
-          explanation: "Read the selected expression as a power-rule integral.",
-        },
-        {
-          latex: "\\frac{x^{2+1}}{2+1}+C",
-          explanation: "Increase the exponent by one and divide by the new exponent.",
-        },
-        {
-          latex: "\\frac{x^3}{3}+C",
-          explanation: "Simplify and keep the constant of integration.",
-        },
-      ],
+      steps,
       final_answer: "\\frac{x^3}{3}+C",
     },
     "mock-nvidia-local",
@@ -122,6 +137,76 @@ function extractJsonPayload(text: string) {
 
   const objectMatch = text.match(/{[\s\S]*}/);
   return objectMatch ? objectMatch[0] : text;
+}
+
+// Scans the accumulating model output for completed objects inside the
+// "steps" array so each step can be surfaced the moment it finishes, long
+// before the full JSON document is complete.
+function createIncrementalStepEmitter(onStep: (step: StreamedStep) => void) {
+  let emittedCount = 0;
+
+  return (fullText: string) => {
+    const stepsKey = fullText.indexOf('"steps"');
+    if (stepsKey === -1) return;
+    const arrayStart = fullText.indexOf("[", stepsKey);
+    if (arrayStart === -1) return;
+
+    const objects: string[] = [];
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let objectStart = -1;
+
+    for (let index = arrayStart + 1; index < fullText.length; index += 1) {
+      const char = fullText[index];
+
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === "{") {
+        if (depth === 0) objectStart = index;
+        depth += 1;
+        continue;
+      }
+
+      if (char === "}") {
+        depth -= 1;
+        if (depth === 0 && objectStart !== -1) {
+          objects.push(fullText.slice(objectStart, index + 1));
+          objectStart = -1;
+        }
+        continue;
+      }
+
+      if (char === "]" && depth === 0) break;
+    }
+
+    while (emittedCount < objects.length) {
+      try {
+        const parsed = JSON.parse(objects[emittedCount]) as { latex?: unknown; explanation?: unknown };
+        if (typeof parsed.latex === "string" && typeof parsed.explanation === "string") {
+          onStep({
+            stepNum: emittedCount + 1,
+            latex: parsed.latex,
+            explanation: parsed.explanation,
+          });
+        }
+        emittedCount += 1;
+      } catch {
+        // The newest object is still streaming in; try again on the next chunk.
+        break;
+      }
+    }
+  };
 }
 
 async function requestCompletion(body: string, apiKey: string) {
@@ -138,14 +223,69 @@ async function requestCompletion(body: string, apiKey: string) {
   return response;
 }
 
-export async function solveWithNvidia(input: SolveInput): Promise<Solution> {
+type StreamUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+};
+
+async function consumeCompletionStream(
+  body: ReadableStream<Uint8Array>,
+  onText: (accumulated: string) => void,
+): Promise<{ text: string; usage: StreamUsage | null }> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+  let usage: StreamUsage | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+
+      const payload = trimmed.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+
+      let chunk: {
+        choices?: Array<{ delta?: { content?: string } }>;
+        usage?: StreamUsage;
+      };
+
+      try {
+        chunk = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+
+      if (chunk.usage) usage = chunk.usage;
+
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (delta) {
+        text += delta;
+        onText(text);
+      }
+    }
+  }
+
+  return { text, usage };
+}
+
+export async function solveWithNvidia(input: SolveInput, hooks?: SolveHooks): Promise<Solution> {
   const apiKey = process.env.NVIDIA_API_KEY;
   const model = process.env.NVIDIA_MODEL ?? "stepfun-ai/step-3.7-flash";
 
   if (!apiKey) {
     // Mock answers are a local-dev convenience only. In production a missing
     // key must fail loudly instead of returning fabricated solutions.
-    if (!isProductionRuntime()) return mockSolve(input);
+    if (!isProductionRuntime()) return mockSolve(input, hooks);
     throw new SolverError("The AI solver is not configured.", "not_configured");
   }
 
@@ -189,6 +329,8 @@ export async function solveWithNvidia(input: SolveInput): Promise<Solution> {
     ],
     max_tokens: 2048,
     temperature: 0.2,
+    stream: true,
+    stream_options: { include_usage: true },
   });
 
   let response: Response;
@@ -216,20 +358,24 @@ export async function solveWithNvidia(input: SolveInput): Promise<Solution> {
     );
   }
 
-  const payload = (await response.json().catch(() => null)) as {
-    choices?: Array<{
-      message?: {
-        content?: string;
-      };
-    }>;
-    usage?: {
-      prompt_tokens?: number;
-      completion_tokens?: number;
-      total_tokens?: number;
-    };
-  } | null;
+  if (!response.body) {
+    throw new SolverError("The AI solver returned an empty response.", "invalid_response", true);
+  }
 
-  const text = payload?.choices?.[0]?.message?.content;
+  const emitStepsFrom = createIncrementalStepEmitter((step) => hooks?.onStep?.(step));
+
+  let text: string;
+  let usage: StreamUsage | null;
+
+  try {
+    ({ text, usage } = await consumeCompletionStream(response.body, emitStepsFrom));
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new SolverError("The AI solver timed out mid-response. Try again.", "upstream_timeout", true);
+    }
+
+    throw new SolverError("The AI solver connection dropped. Try again.", "upstream_failed", true);
+  }
 
   if (!text) {
     throw new SolverError("The AI solver returned an empty response.", "invalid_response", true);
@@ -249,9 +395,9 @@ export async function solveWithNvidia(input: SolveInput): Promise<Solution> {
     throw new SolverError("The AI solver returned an incomplete answer.", "invalid_response", true);
   }
 
-  const promptTokens = payload?.usage?.prompt_tokens ?? 0;
-  const completionTokens = payload?.usage?.completion_tokens ?? 0;
-  const tokensUsed = payload?.usage?.total_tokens ?? promptTokens + completionTokens;
+  const promptTokens = usage?.prompt_tokens ?? 0;
+  const completionTokens = usage?.completion_tokens ?? 0;
+  const tokensUsed = usage?.total_tokens ?? promptTokens + completionTokens;
   const costUsd =
     promptTokens * costPerToken("NVIDIA_INPUT_COST_PER_MTOK") +
     completionTokens * costPerToken("NVIDIA_OUTPUT_COST_PER_MTOK");

@@ -65,22 +65,38 @@ export async function captureException(error: unknown, metadata?: TelemetryMetad
 
 export async function getObservabilitySummary(limit = 500) {
   const events = await listUsageEvents(limit);
-  const solveDurations = events
-    .filter((event) => event.eventType === "solve")
+  const solveEvents = events.filter((event) => event.eventType === "solve");
+  const solveDurations = solveEvents
     .map((event) => Number(event.metadata?.durationMs))
     .filter((value) => Number.isFinite(value) && value >= 0)
     .sort((a, b) => a - b);
   const webVitals = events.filter((event) => event.eventType === "web_vital");
   const errors = events.filter((event) => event.eventType === "error");
+  const cachedSolves = solveEvents.filter((event) => event.metadata?.cached === true).length;
+  const verificationRetries = solveEvents.filter(
+    (event) => event.metadata?.verificationStatus === "mismatch",
+  ).length;
+  const totalTokens = solveEvents.reduce((sum, event) => {
+    const tokens = Number(event.metadata?.tokensUsed);
+    return sum + (Number.isFinite(tokens) ? tokens : 0);
+  }, 0);
+  const totalCostUsd = events.reduce((sum, event) => sum + (Number.isFinite(event.costUsd) ? event.costUsd : 0), 0);
 
   return {
     generatedAt: new Date().toISOString(),
     eventCount: events.length,
     solve: {
-      count: solveDurations.length,
+      count: solveEvents.length,
+      cachedCount: cachedSolves,
+      mismatchCount: verificationRetries,
       p50Ms: percentile(solveDurations, 50),
       p95Ms: percentile(solveDurations, 95),
       latestMs: solveDurations.at(-1) ?? null,
+    },
+    cost: {
+      totalUsd: Number(totalCostUsd.toFixed(4)),
+      totalTokens,
+      avgTokensPerSolve: solveEvents.length ? Math.round(totalTokens / solveEvents.length) : 0,
     },
     errors: {
       count: errors.length,

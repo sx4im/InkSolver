@@ -1,13 +1,20 @@
+import zlib from "zlib";
+
 import { NextResponse } from "next/server";
 import { ZodError, type ZodTypeAny } from "zod";
 
 import { trackTelemetryEvent } from "@/server/observability";
 import { trustProxyHeaders } from "@/server/runtime-guards";
 
+type GzipOptions = {
+  maxDecompressedBytes: number;
+};
+
 type GuardedJsonOptions = {
   fallback?: unknown;
   maxBytes: number;
   route: string;
+  gzip?: GzipOptions;
 };
 
 type GuardResult<T> =
@@ -52,7 +59,8 @@ export const requestBodyLimits = {
   canvasCreate: 8 * 1024,
   canvasPatch: 4 * 1024 * 1024,
   chat: 16 * 1024,
-  export: 4 * 1024,
+  // Exports carry a client-captured image of the actual board.
+  export: 6 * 1024 * 1024,
   solve: 6 * 1024 * 1024,
   telemetry: 32 * 1024,
   webhook: 256 * 1024,
@@ -130,6 +138,7 @@ export async function parseGuardedJson<TSchema extends ZodTypeAny>(
     maxBytes: options.maxBytes,
     route: options.route,
     fallback: options.fallback,
+    gzip: options.gzip,
   });
 
   if (!textResult.ok) return textResult;
@@ -188,6 +197,7 @@ export async function readGuardedText(
     fallback?: unknown;
     maxBytes: number;
     route: string;
+    gzip?: GzipOptions;
   },
 ): Promise<GuardResult<string | unknown>> {
   const contentLength = Number(request.headers.get("content-length") ?? "0");
@@ -203,6 +213,58 @@ export async function readGuardedText(
       ok: false,
       response: tooLargeResponse(options.maxBytes),
     };
+  }
+
+  // Large canvas snapshots arrive gzip-compressed (tldraw JSON compresses
+  // ~10x), with a separate cap on the decompressed size to bound memory.
+  if (options.gzip && request.headers.get("x-inksolver-encoding") === "gzip") {
+    const compressed = Buffer.from(await request.arrayBuffer());
+
+    if (compressed.byteLength > options.maxBytes) {
+      await recordRejectedRequest("body_too_large", {
+        route: options.route,
+        byteLength: compressed.byteLength,
+        maxBytes: options.maxBytes,
+      });
+
+      return {
+        ok: false,
+        response: tooLargeResponse(options.maxBytes),
+      };
+    }
+
+    try {
+      const decompressed = zlib.gunzipSync(compressed, {
+        maxOutputLength: options.gzip.maxDecompressedBytes,
+      });
+
+      return {
+        ok: true,
+        data: decompressed.toString("utf8"),
+      };
+    } catch {
+      await recordRejectedRequest("invalid_gzip_body", {
+        route: options.route,
+        maxDecompressedBytes: options.gzip.maxDecompressedBytes,
+      });
+
+      return {
+        ok: false,
+        response: NextResponse.json(
+          {
+            error: "Compressed request body could not be decoded.",
+            code: "invalid_gzip_body",
+            max_decompressed_bytes: options.gzip.maxDecompressedBytes,
+          },
+          {
+            status: 400,
+            headers: {
+              "Cache-Control": "no-store",
+            },
+          },
+        ),
+      };
+    }
   }
 
   const raw = await request.text();

@@ -1,6 +1,10 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import zlib from "zlib";
+
+const tinyPngDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 const baseUrl = process.env.INKSOLVER_SMOKE_BASE_URL || process.argv[2] || "http://127.0.0.1:3000";
 const cwd = process.cwd();
@@ -191,6 +195,40 @@ async function main() {
   await chat(solutionId, userA, "Summarize the solution.");
   remember("follow-up chat streams twice");
 
+  const chatHistory = await request("GET", `/api/v1/solutions/${solutionId}/chat`, {
+    headers: userA,
+    expect: 200,
+  });
+  if (!Array.isArray(chatHistory.data.messages) || chatHistory.data.messages.length < 4) {
+    throw new Error(`Chat history did not persist: ${JSON.stringify(chatHistory.data)}`);
+  }
+  remember("chat history endpoint returns persisted messages");
+
+  const gzipState = {
+    tldraw_state: {
+      smoke: "gzip",
+      marks: Array.from({ length: 200 }, (_, index) => ({ id: `mark-${index}`, x: index, y: index * 2 })),
+    },
+  };
+  await request("PATCH", `/api/v1/canvases/${canvasId}`, {
+    headers: {
+      ...userA,
+      "content-type": "application/json",
+      "x-inksolver-encoding": "gzip",
+    },
+    expect: 200,
+    json: false,
+    rawBody: zlib.gzipSync(JSON.stringify(gzipState)),
+  });
+  const afterGzip = await request("GET", `/api/v1/canvases/${canvasId}`, {
+    headers: userA,
+    expect: 200,
+  });
+  if (afterGzip.data.canvas?.tldrawState?.smoke !== "gzip") {
+    throw new Error("Gzipped canvas save did not round-trip.");
+  }
+  remember("gzip-compressed autosave round-trips");
+
   await request("GET", `/api/v1/canvases/${canvasId}`, {
     headers: userB,
     expect: 404,
@@ -315,6 +353,41 @@ async function main() {
     throw new Error(`Expected quota_exceeded SSE error, got: ${JSON.stringify(quotaPayload)}`);
   }
   remember("free solve quota returns upgrade-shaped block");
+
+  const cacheUser = identity("cache", 18);
+  const cacheCanvas = await createCanvas(cacheUser, "Cache Canvas", "math");
+  const cacheBody = {
+    region_bounds: { x: 0, y: 0, w: 100, h: 80 },
+    snapshot_b64: tinyPngDataUrl,
+    problem_hint: "Cache me",
+  };
+  const firstCachedSolve = await (async () => {
+    const { text } = await request("POST", `/api/v1/canvases/${cacheCanvas.data.canvas_id}/solve`, {
+      headers: cacheUser,
+      expect: 200,
+      json: false,
+      body: cacheBody,
+    });
+    return parseSseDone(text, "cache solve 1");
+  })();
+  const meAfterFirst = await request("GET", "/api/v1/me", { headers: cacheUser, expect: 200 });
+  const secondCachedSolve = await (async () => {
+    const { text } = await request("POST", `/api/v1/canvases/${cacheCanvas.data.canvas_id}/solve`, {
+      headers: cacheUser,
+      expect: 200,
+      json: false,
+      body: cacheBody,
+    });
+    return parseSseDone(text, "cache solve 2");
+  })();
+  const meAfterSecond = await request("GET", "/api/v1/me", { headers: cacheUser, expect: 200 });
+  if (firstCachedSolve.solution_id !== secondCachedSolve.solution_id) {
+    throw new Error("Identical re-solve did not return the cached verified solution.");
+  }
+  if (meAfterSecond.data.user.problemsToday !== meAfterFirst.data.user.problemsToday) {
+    throw new Error("Cached solve consumed quota.");
+  }
+  remember("identical verified re-solve is cached and quota-free");
 
   const rateUser = identity("rate", 17);
   let rateLimited = false;
