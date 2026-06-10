@@ -42,6 +42,7 @@ type RegionMode = "selection" | "viewport" | null;
 
 const autosaveDebounceMs = 1200;
 const maxSaveRetryDelayMs = 30_000;
+const thumbnailIntervalMs = 30_000;
 // fetch keepalive bodies are capped around 64KB by browsers; larger snapshots
 // rely on the beforeunload prompt plus the regular debounced autosave.
 const keepaliveFlushLimitBytes = 60_000;
@@ -96,6 +97,7 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
   const debounceTimerRef = useRef<number | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
+  const lastThumbnailAtRef = useRef(0);
 
   const activeSolution = solutions[0];
   const activeSolutionId = activeSolution?.id ?? null;
@@ -106,6 +108,25 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
     if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = window.setTimeout(() => setNotice(null), 8000);
   }, []);
+
+  // Refresh the dashboard thumbnail occasionally after saves: a small JPEG of
+  // the real board, stored as a data URL. Fire-and-forget — thumbnail failures
+  // must never affect save state.
+  const updateThumbnail = useCallback(async () => {
+    const image = await captureCanvasImage(editorRef.current, "jpeg", {
+      maxPixels: 180_000,
+      maxBytes: 60_000,
+      quality: 0.5,
+    });
+
+    if (!image) return;
+
+    await fetch(`/api/v1/canvases/${canvas.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thumbnail_url: image }),
+    }).catch(() => null);
+  }, [canvas.id]);
 
   const performSave = useCallback(async () => {
     const editor = editorRef.current;
@@ -141,6 +162,11 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
       retryCountRef.current = 0;
       saveInFlightRef.current = false;
 
+      if (Date.now() - lastThumbnailAtRef.current > thumbnailIntervalMs) {
+        lastThumbnailAtRef.current = Date.now();
+        void updateThumbnail();
+      }
+
       // Changes made while the request was in flight start another save so
       // nothing is dropped on slow connections.
       if (dirtyRef.current) {
@@ -159,7 +185,7 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
         void performSave();
       }, retryDelay);
     }
-  }, [canvas.id]);
+  }, [canvas.id, updateThumbnail]);
 
   const handleDocumentChange = useCallback(() => {
     dirtyRef.current = true;
@@ -652,10 +678,18 @@ const maxSnapshotPixels = 2_200_000;
 const maxSnapshotBytes = 3_400_000;
 
 // Captures every shape on the current page as an image of the real board for
-// exports. Returns null on an empty canvas so the server falls back to a
-// text-only document.
-async function captureCanvasImage(editor: Editor | null, format: "png" | "jpeg"): Promise<string | null> {
+// exports and dashboard thumbnails. Returns null on an empty canvas so
+// callers can fall back gracefully.
+async function captureCanvasImage(
+  editor: Editor | null,
+  format: "png" | "jpeg",
+  options: { maxPixels?: number; maxBytes?: number; quality?: number } = {},
+): Promise<string | null> {
   if (!editor) return null;
+
+  const maxPixels = options.maxPixels ?? maxSnapshotPixels;
+  const maxBytes = options.maxBytes ?? maxSnapshotBytes;
+  const quality = options.quality ?? 0.85;
 
   const shapeIds = [...editor.getCurrentPageShapeIds()];
   if (!shapeIds.length) return null;
@@ -677,7 +711,7 @@ async function captureCanvasImage(editor: Editor | null, format: "png" | "jpeg")
   if (!Number.isFinite(minX)) return null;
 
   const area = Math.max(1, (maxX - minX) * (maxY - minY));
-  const baseRatio = Math.min(2, Math.max(0.3, Math.sqrt(maxSnapshotPixels / area)));
+  const baseRatio = Math.min(2, Math.max(0.05, Math.sqrt(maxPixels / area)));
 
   for (const pixelRatio of [baseRatio, baseRatio / 2]) {
     try {
@@ -686,10 +720,10 @@ async function captureCanvasImage(editor: Editor | null, format: "png" | "jpeg")
         format,
         padding: 32,
         pixelRatio,
-        quality: 0.85,
+        quality,
       });
 
-      if (Math.floor(image.url.length * 0.75) <= maxSnapshotBytes) {
+      if (Math.floor(image.url.length * 0.75) <= maxBytes) {
         return image.url;
       }
     } catch {

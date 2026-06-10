@@ -335,6 +335,21 @@ async function main() {
   }
   remember("local Pro upgrade bypasses free canvas limit");
 
+  await request("POST", "/api/v1/solutions/search", {
+    headers: userA,
+    expect: 403,
+    body: { query: "projectile range" },
+  });
+  const proSearch = await request("POST", "/api/v1/solutions/search", {
+    headers: proUser,
+    json: false,
+    body: { query: "projectile range" },
+  });
+  if (![200, 503].includes(proSearch.response.status)) {
+    throw new Error(`Pro search expected 200 or 503 (unconfigured), got ${proSearch.response.status}`);
+  }
+  remember("semantic search gates free users and degrades gracefully");
+
   const quotaUser = identity("quota", 16);
   const quotaCanvas = await createCanvas(quotaUser, "Quota Canvas", "math");
   for (let index = 0; index < 10; index += 1) {

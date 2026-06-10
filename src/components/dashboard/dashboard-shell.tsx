@@ -11,6 +11,7 @@ import {
 
 import { AppHeader } from "@/components/app-header";
 import { CreateCanvasButton } from "@/components/dashboard/create-canvas-button";
+import { SolutionSearch } from "@/components/dashboard/solution-search";
 import { Latex } from "@/components/math/latex";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,15 +113,28 @@ export function DashboardShell({ user, canvases }: DashboardShellProps) {
                     className="group rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#458fff]"
                   >
                     <Surface className="overflow-hidden transition-colors group-active:bg-surface-soft">
-                      <div className={cn("canvas-grid flex aspect-[4/3] items-center justify-center p-6", thumbnailToneClass[canvas.thumbnailTone])}>
-                        <div className="w-full rounded-md bg-white/90 p-4 text-ink">
-                          <p className="text-2xl leading-none">
-                            <Latex value={canvas.subject === "physics" ? "v^2 = u^2 + 2as" : "\\int x^2\\,dx"} />
-                          </p>
-                          <div className="mt-5 h-2 w-2/3 rounded-full bg-ink/20" />
-                          <div className="mt-2 h-2 w-1/2 rounded-full bg-ink/20" />
+                      {canvas.thumbnailUrl ? (
+                        <div className="aspect-[4/3] overflow-hidden bg-white">
+                          {/* Thumbnails are tiny self-contained data URLs; next/image adds nothing here. */}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={canvas.thumbnailUrl}
+                            alt={`Preview of ${canvas.title}`}
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                          />
                         </div>
-                      </div>
+                      ) : (
+                        <div className={cn("canvas-grid flex aspect-[4/3] items-center justify-center p-6", thumbnailToneClass[canvas.thumbnailTone])}>
+                          <div className="w-full rounded-md bg-white/90 p-4 text-ink">
+                            <p className="text-2xl leading-none">
+                              <Latex value={canvas.subject === "physics" ? "v^2 = u^2 + 2as" : "\\int x^2\\,dx"} />
+                            </p>
+                            <div className="mt-5 h-2 w-2/3 rounded-full bg-ink/20" />
+                            <div className="mt-2 h-2 w-1/2 rounded-full bg-ink/20" />
+                          </div>
+                        </div>
+                      )}
                       <div className="p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -156,7 +170,9 @@ export function DashboardShell({ user, canvases }: DashboardShellProps) {
             )}
           </div>
 
-          <Surface className="self-start bg-primary p-6 text-white">
+          <div className="space-y-4 self-start">
+          <SolutionSearch plan={user.plan} />
+          <Surface className="bg-primary p-6 text-white">
             <h2 className="text-2xl font-normal leading-tight">Verification-first solving</h2>
             <p className="mt-4 leading-6 text-white/80">
               Every answer is checked against a symbolic math engine. Steps that pass are marked
@@ -169,6 +185,7 @@ export function DashboardShell({ user, canvases }: DashboardShellProps) {
               </Link>
             </Button>
           </Surface>
+          </div>
         </section>
       </main>
     </div>

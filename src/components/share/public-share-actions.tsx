@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 type RemixResponse = {
   canvas_id?: string;
   code?: string;
+  error?: string;
 };
 
 export function PublicShareActions({ shareSlug }: { shareSlug: string }) {
@@ -42,6 +43,19 @@ export function PublicShareActions({ shareSlug }: { shareSlug: string }) {
 
       if (response.status === 402 && payload.code === "active_canvas_limit") {
         setStatus("Free accounts can keep 5 active canvases. Delete one or upgrade to Pro before remixing.");
+        return;
+      }
+
+      // A 404 carrying our JSON error body means the canvas was unshared; a
+      // bare 401/403/404 (or redirect) is the auth wall — share pages are
+      // public, so signed-out visitors need an account to own the remix.
+      if (response.status === 404 && payload.error) {
+        setStatus("This canvas is no longer shared.");
+        return;
+      }
+
+      if (response.status === 401 || response.status === 403 || response.status === 404 || response.redirected) {
+        router.push(`/sign-in?redirect_url=${encodeURIComponent(`/s/${shareSlug}`)}`);
         return;
       }
 

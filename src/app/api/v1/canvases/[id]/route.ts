@@ -14,7 +14,8 @@ const updateCanvasSchema = z.object({
   title: z.string().min(1).max(120).optional(),
   subject: z.enum(["math", "physics", "chem", "unknown"]).optional(),
   tldraw_state: z.unknown().optional(),
-  thumbnail_url: z.string().nullable().optional(),
+  // Thumbnails are small client-generated JPEG data URLs; bound their size.
+  thumbnail_url: z.string().max(120_000).nullable().optional(),
   is_public: z.boolean().optional(),
 });
 

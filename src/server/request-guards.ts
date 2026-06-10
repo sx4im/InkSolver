@@ -82,15 +82,54 @@ const rateLimitPolicies: Record<RateLimitName, RateLimitPolicy> = {
   webhook: { max: 240, windowMs: 60 * 1000 },
 };
 
-export async function enforceRateLimit(
-  request: Request,
-  name: RateLimitName,
-  metadata: Record<string, unknown> = {},
-) {
-  const ip = getClientIp(request);
-  const policy = rateLimitPolicies[name];
+// Serverless platforms run many instances, so the in-memory store only limits
+// per-instance. When Upstash Redis credentials are configured the count is
+// shared across all instances via a single REST pipeline call; any Redis
+// failure falls back to the in-memory limiter rather than blocking traffic.
+async function incrementUpstash(
+  key: string,
+  policy: RateLimitPolicy,
+): Promise<{ count: number; resetAt: number } | null> {
+  const url = process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+
+  const windowSeconds = Math.max(1, Math.ceil(policy.windowMs / 1000));
+
+  try {
+    const response = await fetch(`${url}/pipeline`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([
+        ["INCR", key],
+        ["EXPIRE", key, String(windowSeconds), "NX"],
+        ["TTL", key],
+      ]),
+      signal: AbortSignal.timeout(2000),
+    });
+
+    if (!response.ok) return null;
+
+    const payload = (await response.json()) as Array<{ result?: unknown }>;
+    const count = Number(payload?.[0]?.result);
+    const ttl = Number(payload?.[2]?.result);
+
+    if (!Number.isFinite(count)) return null;
+
+    return {
+      count,
+      resetAt: Date.now() + (Number.isFinite(ttl) && ttl > 0 ? ttl : windowSeconds) * 1000,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function incrementInMemory(key: string, policy: RateLimitPolicy) {
   const now = Date.now();
-  const key = `${name}:${ip}`;
   const current = rateLimitStore.get(key);
   const entry =
     !current || current.resetAt <= now
@@ -99,12 +138,25 @@ export async function enforceRateLimit(
 
   entry.count += 1;
   rateLimitStore.set(key, entry);
-
   pruneRateLimitStore(now);
+
+  return entry;
+}
+
+export async function enforceRateLimit(
+  request: Request,
+  name: RateLimitName,
+  metadata: Record<string, unknown> = {},
+) {
+  const ip = getClientIp(request);
+  const policy = rateLimitPolicies[name];
+  const key = `${name}:${ip}`;
+
+  const entry = (await incrementUpstash(key, policy)) ?? incrementInMemory(key, policy);
 
   if (entry.count <= policy.max) return null;
 
-  const retryAfterSeconds = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+  const retryAfterSeconds = Math.max(1, Math.ceil((entry.resetAt - Date.now()) / 1000));
 
   await recordRejectedRequest("rate_limited", {
     ...metadata,

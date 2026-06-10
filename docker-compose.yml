@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  # Local Postgres with pgvector, matching the default drizzle.config.ts URL:
+  # postgres://inksolver:inksolver@localhost:5432/inksolver
+  db:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=inksolver
+      - POSTGRES_PASSWORD=inksolver
+      - POSTGRES_DB=inksolver
+    volumes:
+      - inksolver-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inksolver"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   verifier:
     build:
       context: ./services/verifier
@@ -13,3 +31,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+volumes:
+  inksolver-pgdata:

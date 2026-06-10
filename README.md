@@ -22,6 +22,8 @@ Draw equations, diagrams, or math problems on an infinite canvas — InkSolver u
 - **Chat Assistant** — Ask follow-up questions about any solution step
 - **Verification Engine** — Symbolic verification via SymPy; mismatched answers trigger an automatic re-solve, and byte-identical re-solves of verified work are served from cache without spending quota
 - **Resilient Autosave** — Debounced, gzip-compressed saves with retry/backoff, reconnect handling, and unsaved-work warnings
+- **Live Thumbnails** — Dashboard cards show a real capture of each board, refreshed as you draw
+- **Semantic Search (Pro)** — Find past solutions by meaning across every canvas you own
 
 ## Tech Stack
 
@@ -75,14 +77,19 @@ NVIDIA_MODEL=stepfun-ai/step-3.7-flash
 
 # Optional
 NEXT_PUBLIC_TLDRAW_LICENSE_KEY=        # Get free at tldraw.com/pricing
+INKSOLVER_OWNER_EMAIL=                 # Gates the /readiness dashboard in production
+INKSOLVER_ADMIN_TOKEN=                 # Bearer token for readiness/observability APIs
 CLOUDFLARE_R2_ACCOUNT_ID=
 CLOUDFLARE_R2_ACCESS_KEY_ID=
 CLOUDFLARE_R2_SECRET_ACCESS_KEY=
 CLOUDFLARE_R2_BUCKET=
 CLOUDFLARE_R2_PUBLIC_URL=
 SYMPY_VERIFIER_URL=
+GEMINI_API_KEY=                        # Follow-up chat + semantic search embeddings
 LEMON_SQUEEZY_CHECKOUT_URL=
 LEMON_SQUEEZY_WEBHOOK_SECRET=
+UPSTASH_REDIS_REST_URL=                # Shared rate limits across serverless instances
+UPSTASH_REDIS_REST_TOKEN=
 POSTHOG_KEY=
 POSTHOG_HOST=
 SENTRY_INGEST_URL=
@@ -98,14 +105,29 @@ cd InkSolver
 # Install dependencies
 pnpm install
 
-# Set up database
-pnpm db:push
+# Optional: start local Postgres (pgvector) + the verifier service
+docker compose up -d
+
+# Set up database (skip to run on the local JSON store instead)
+pnpm db:migrate
 
 # Run dev server
 pnpm dev
 ```
 
-The app will be available at `http://localhost:3000`.
+The app will be available at `http://localhost:3000`. Without `DATABASE_URL` the app
+runs on a local JSON store; without `NVIDIA_API_KEY` solving uses a mock solution in
+development (and fails loudly in production).
+
+### Quality checks
+
+```bash
+pnpm typecheck && pnpm lint && pnpm build   # static checks + production build
+pnpm smoke:local                            # 22-check API suite against a running dev server
+pnpm test:e2e                               # Playwright browser tests
+```
+
+CI (GitHub Actions) runs all of the above plus the Python verifier tests on every push.
 
 ### Run the Verifier Service (Optional)
 

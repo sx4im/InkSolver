@@ -13,10 +13,12 @@ const stepStatusClass = {
   mismatch: "border-danger/25 bg-danger/5",
 };
 
-// Pending/status placeholders ("Solving...", "Verifying...") are plain prose,
-// not math; only render through KaTeX when the text looks like LaTeX.
+// Pending/status placeholders ("Solving...", "Re-solving after a verification
+// mismatch...") are plain prose, not math; only render through KaTeX when the
+// text carries LaTeX commands, grouping, or digits. A bare hyphen must NOT
+// count — status prose contains hyphens.
 function looksLikeMath(value: string) {
-  return /[\\^_{}=+\-*/]|\d/.test(value);
+  return /[\\^_{}=]|\d/.test(value);
 }
 
 export function SolutionCard({

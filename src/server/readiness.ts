@@ -88,6 +88,14 @@ const checks: CheckDefinition[] = [
     action: "Configure checkout, set webhook secret, and replay a sandbox subscription event.",
   },
   {
+    id: "rate-limits",
+    label: "Shared rate limits",
+    description: "Upstash Redis so rate limits count across all serverless instances instead of per-instance.",
+    requiredEnv: ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
+    action: "Create an Upstash Redis database and set the REST URL and token.",
+    warning: true,
+  },
+  {
     id: "analytics",
     label: "PostHog analytics",
     description: "Funnel events for signup, first solve, second solve, exports, and retention.",

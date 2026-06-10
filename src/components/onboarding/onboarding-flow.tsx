@@ -8,7 +8,6 @@ import { CreateCanvasButton } from "@/components/dashboard/create-canvas-button"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
-import { DEMO_CANVAS_ID } from "@/lib/mock-data";
 import type { Subject } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +52,8 @@ export function OnboardingFlow() {
           <Badge tone="dark">First solve</Badge>
           <h1 className="mt-6 max-w-xl text-[40px] font-normal leading-[1.2] text-ink">Set up the first canvas in three moves.</h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-body">
-            Choose a subject, open the canvas, and run the demo solve path that mirrors the PRD workflow.
+            Choose a subject, open a canvas, draw the problem, and press Solve to see verified
+            steps appear beside your work.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <CreateCanvasButton
@@ -62,8 +62,8 @@ export function OnboardingFlow() {
               label="Create my canvas"
             />
             <Button asChild variant="secondary" size="lg">
-              <Link href={`/c/${DEMO_CANVAS_ID}`}>
-                Open demo
+              <Link href="/">
+                Go to dashboard
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </Button>
@@ -139,7 +139,8 @@ export function OnboardingFlow() {
                 Verified solve path ready
               </div>
               <p className="mt-3 text-sm leading-6 text-body">
-                The demo canvas can solve the integral fallback, stream steps, verify the answer, and answer step follow-ups.
+                Solutions stream in step by step, get checked against a symbolic math engine, and
+                stay available for follow-up questions in the chat panel.
               </p>
             </div>
           ) : null}

@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { getReadinessReport, type ReadinessCheck } from "@/server/readiness";
 import { getAuthenticatedUser } from "@/server/auth-context";
-
-const OWNER_EMAIL = "msaimshafique4664@gmail.com";
+import { isProductionRuntime } from "@/server/runtime-guards";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +25,10 @@ const statusIcon = {
 
 export default async function ReadinessPage() {
   const user = await getAuthenticatedUser();
-  const isOwner = user.email.toLowerCase() === OWNER_EMAIL.toLowerCase();
+  // Operator-only diagnostics: gate by INKSOLVER_OWNER_EMAIL in production
+  // instead of a hardcoded address; always available in local development.
+  const ownerEmail = process.env.INKSOLVER_OWNER_EMAIL?.trim().toLowerCase();
+  const isOwner = !isProductionRuntime() || (Boolean(ownerEmail) && user.email.toLowerCase() === ownerEmail);
 
   if (!isOwner) {
     return (

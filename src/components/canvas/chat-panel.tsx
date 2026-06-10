@@ -30,29 +30,35 @@ export function ChatPanel({
   const [isSending, setIsSending] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
+  useEffect(() => () => recognitionRef.current?.stop(), []);
+
   const toggleListening = () => {
     if (isListening) {
+      // Keep the instance so toggling off actually stops the microphone.
+      recognitionRef.current?.stop();
       setIsListening(false);
       return;
     }
-    
-    // Check if browser supports speech recognition
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("Your browser does not support voice input.");
       return;
     }
-    
+
     setIsListening(true);
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     recognition.continuous = false;
     recognition.interimResults = true;
-    
+
     recognition.onresult = (event: any) => {
       let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -64,15 +70,16 @@ export function ChatPanel({
         setDraft((prev) => prev ? prev + " " + finalTranscript : finalTranscript);
       }
     };
-    
+
     recognition.onerror = () => {
       setIsListening(false);
     };
-    
+
     recognition.onend = () => {
+      recognitionRef.current = null;
       setIsListening(false);
     };
-    
+
     recognition.start();
   };
 
@@ -242,7 +249,7 @@ export function ChatPanel({
         <div ref={scrollRef} />
       </div>
 
-      <form className="border-t border-hairline p-4" onSubmit={handleSubmit}>
+      <form ref={formRef} className="border-t border-hairline p-4" onSubmit={handleSubmit}>
         <label className="sr-only" htmlFor="chat-message">
           Ask a follow-up
         </label>
@@ -255,6 +262,12 @@ export function ChatPanel({
             value={draft}
             disabled={!solution || isSending}
             onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                formRef.current?.requestSubmit();
+              }
+            }}
           />
           <Button type="button" variant="secondary" size="icon" aria-label="Voice input" disabled={!solution || isSending} onClick={toggleListening} className={isListening ? "bg-red-100 text-red-600" : ""}>
             <Mic className="h-4 w-4" aria-hidden="true" />
