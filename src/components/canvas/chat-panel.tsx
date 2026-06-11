@@ -265,7 +265,8 @@ export function ChatPanel({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                formRef.current?.requestSubmit();
+                // requestSubmit is missing in older Safari; optional-call it.
+                formRef.current?.requestSubmit?.();
               }
             }}
           />

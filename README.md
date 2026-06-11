@@ -64,9 +64,9 @@ flowchart LR
     subgraph "Next.js API"
         B --> D{Cache hit?}
         D -->|yes| C
-        D -->|no| E[NVIDIA NIM\nvision model]
+        D -->|no| E[NVIDIA NIM<br/>vision model]
         E -->|streamed steps| C
-        E --> F[SymPy verifier\nFastAPI]
+        E --> F[SymPy verifier<br/>FastAPI]
         F -->|mismatch| E
         F -->|verdict| C
         C --> G[(Postgres + pgvector)]
@@ -122,6 +122,7 @@ Open `http://localhost:3000`. **Everything degrades gracefully**: without `DATAB
 |---|---|---|
 | `DATABASE_URL` | production | Postgres (pgvector). Local JSON store used when absent |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | production | Authentication |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_URL` / `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | production | Set to `/sign-in` and `/sign-up` so signed-out users land on the in-app auth pages |
 | `NVIDIA_API_KEY` / `NVIDIA_MODEL` | production | Vision solver (mock in dev when absent) |
 | `NVIDIA_TIMEOUT_MS`, `NVIDIA_INPUT_COST_PER_MTOK`, `NVIDIA_OUTPUT_COST_PER_MTOK` | no | Solver timeout + real $ cost accounting |
 | `GEMINI_API_KEY` | no | Follow-up chat + semantic-search embeddings |
