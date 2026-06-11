@@ -20,7 +20,7 @@ Sketch an equation, circuit, or chemistry problem on an infinite canvas — InkS
 [![GitHub stars](https://img.shields.io/github/stars/sx4im/InkSolver?style=social)](https://github.com/sx4im/InkSolver/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/sx4im/InkSolver?style=social)](https://github.com/sx4im/InkSolver/fork)
 
-**If InkSolver helps you, [give it a star ⭐](https://github.com/sx4im/InkSolver/stargazers) — it helps more students and developers find the project.**
+**If InkSolver helps you, [give it a star](https://github.com/sx4im/InkSolver/stargazers) — it helps more students and developers find the project.**
 
 </div>
 
@@ -30,26 +30,26 @@ Sketch an equation, circuit, or chemistry problem on an infinite canvas — InkS
 
 Math help tools make you *type* LaTeX or photograph paper. InkSolver meets you where STEM work actually happens — **freehand, on a whiteboard** — and treats correctness as a feature:
 
-- ✍️ **Draw, don't transcribe** — solve directly from your handwriting and diagrams
-- ⚡ **Watch it think** — solution steps stream in live as the model writes them
-- ✅ **Trust, but verify** — every answer is checked by SymPy; mismatches trigger an automatic re-solve, and anything unconfirmed is *flagged*, never hidden
-- 🧠 **Ask why** — every step has a context-aware follow-up chat (with voice input)
-- 🔓 **Own your stack** — MIT-licensed, self-hostable, no vendor lock-in
+- **Draw, don't transcribe** — solve directly from your handwriting and diagrams
+- **Watch it think** — solution steps stream in live as the model writes them
+- **Trust, but verify** — every answer is checked by SymPy; mismatches trigger an automatic re-solve, and anything unconfirmed is *flagged*, never hidden
+- **Ask why** — every step has a context-aware follow-up chat (with voice input)
+- **Own your stack** — MIT-licensed, self-hostable, no vendor lock-in
 
 ## Features
 
 | | |
 |---|---|
-| 🎨 **Infinite canvas** | Powered by [tldraw](https://tldraw.dev) — pen, shapes, text, images, full undo/redo |
-| 🤖 **Multimodal solving** | Select a region (or just press **Solve** for the visible board) — vision model + structured streaming |
-| 🧮 **Typeset math** | Solutions render as KaTeX, not raw LaTeX strings |
-| 🔬 **Symbolic verification** | A Python/SymPy microservice differentiates, simplifies, and confirms each step |
-| 💾 **Resilient autosave** | Debounced, gzip-compressed (~10×) saves with retry/backoff, offline recovery, and unsaved-work warnings |
-| 🖼️ **Real exports** | PDF embedding your actual board + worked solutions, raw PNG, or LaTeX source |
-| 🔗 **Public sharing** | Read-only share links with OG previews; visitors can remix into their own copy |
-| 🔍 **Semantic search** | Find past solutions by meaning, across every canvas (Pro) |
-| 💸 **Cost-aware** | Token/cost accounting per solve, response caching for repeated problems, quota refunds on failures |
-| 📱 **Mobile-ready** | Solve, save, share, and chat from a phone |
+| **Infinite canvas** | Powered by [tldraw](https://tldraw.dev) — pen, shapes, text, images, full undo/redo |
+| **Multimodal solving** | Select a region (or just press **Solve** for the visible board) — vision model + structured streaming |
+| **Typeset math** | Solutions render as KaTeX, not raw LaTeX strings |
+| **Symbolic verification** | A Python/SymPy microservice differentiates, simplifies, and confirms each step |
+| **Resilient autosave** | Debounced, gzip-compressed (~10×) saves with retry/backoff, offline recovery, and unsaved-work warnings |
+| **Real exports** | PDF embedding your actual board + worked solutions, raw PNG, or LaTeX source |
+| **Public sharing** | Read-only share links with OG previews; visitors can remix into their own copy |
+| **Semantic search** | Find past solutions by meaning, across every canvas (Pro) |
+| **Cost-aware** | Token/cost accounting per solve, response caching for repeated problems, quota refunds on failures |
+| **Mobile-ready** | Solve, save, share, and chat from a phone |
 
 ## How it works
 
@@ -77,6 +77,49 @@ flowchart LR
 2. The solver streams structured JSON; each step is parsed out and forwarded to your screen **the moment the model finishes writing it**.
 3. The SymPy service verifies the result symbolically. A mismatch triggers one corrective re-solve with the verifier's feedback.
 4. Verified byte-identical re-solves are served from cache — no tokens, no quota.
+
+## Architecture
+
+The app is one Next.js deployment that owns the canvas, the API, and all orchestration. AI
+inference and symbolic verification sit behind service modules, so each can be swapped or mocked
+independently — which is why the whole product still runs when none of them are configured.
+
+```mermaid
+flowchart TB
+    subgraph Client["Browser"]
+        TL["tldraw canvas"]
+        UI["Solution panel · Chat · Export"]
+    end
+
+    subgraph App["Next.js 15 · App Router"]
+        API["/api/v1/* route handlers/"]
+        SVC["Solve · Chat · Export · Quota<br/>Snapshot · Readiness services"]
+        CACHE["Solve cache + rate limiter"]
+    end
+
+    subgraph AI["AI & Verification"]
+        NIM["NVIDIA NIM<br/>vision solver"]
+        GEM["Gemini<br/>chat + embeddings"]
+        VER["SymPy verifier<br/>FastAPI"]
+    end
+
+    subgraph Data["Data & Infra"]
+        PG[("Postgres + pgvector")]
+        R2[("Cloudflare R2")]
+        REDIS[("Upstash Redis")]
+    end
+
+    TL --> API
+    UI --> API
+    API --> SVC
+    SVC --> CACHE
+    CACHE --> REDIS
+    SVC --> NIM
+    SVC --> GEM
+    SVC --> VER
+    SVC --> PG
+    SVC --> R2
+```
 
 ## Tech stack
 
@@ -150,6 +193,19 @@ cd services/verifier && pytest              # symbolic verifier tests
 
 CI runs all of the above on every push.
 
+### Scripts
+
+| Command | What it does |
+|---|---|
+| `pnpm dev` | Start the Next.js dev server |
+| `pnpm build` / `pnpm start` | Production build and serve |
+| `pnpm lint` / `pnpm typecheck` | ESLint and `tsc --noEmit` |
+| `pnpm test:e2e` | Playwright end-to-end tests |
+| `pnpm smoke:local` | Local end-to-end API smoke suite |
+| `pnpm db:push` | Push the Drizzle schema to the database |
+| `pnpm db:generate` / `pnpm db:migrate` | Generate and apply SQL migrations |
+| `pnpm seed:demo` | Seed demo data |
+
 ## Deployment
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fsx4im%2FInkSolver)
@@ -193,7 +249,14 @@ Contributions of every size are welcome — verifier rules, UI polish, docs, and
 2. Fork → branch (`feat/amazing-thing`) → commit → PR
 3. CI must pass: `pnpm typecheck && pnpm lint && pnpm smoke:local`
 
-Good first contributions: new SymPy verifier rules, additional e2e specs, and i18n.
+No keys required to develop — the app runs fully against its local fallbacks, so `pnpm dev` is all you need to start.
+
+**Good first issues**
+
+- Add a SymPy rule in `services/verifier/app/main.py` — definite integrals, limits, or linear systems.
+- Improve LaTeX → SymPy parsing for edge cases in the verifier.
+- Polish canvas UX in `src/components/canvas/`.
+- Add Playwright specs in `tests/e2e/` or internationalization (i18n).
 
 ## Star history
 
@@ -213,6 +276,6 @@ Distributed under the [MIT License](LICENSE).
 
 <div align="center">
 
-**Built with passion by [Saim Shafique](https://github.com/sx4im)** — if this project saved you time, [⭐ star it](https://github.com/sx4im/InkSolver) and share it!
+**Built with passion by [Saim Shafique](https://github.com/sx4im)** — if this project saved you time, [star it](https://github.com/sx4im/InkSolver) and share it!
 
 </div>
