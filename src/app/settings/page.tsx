@@ -16,18 +16,20 @@ export default async function SettingsPage() {
       <AppHeader />
       <main className="mx-auto max-w-5xl px-6 py-12">
         <Badge>Settings</Badge>
-        <h1 className="mt-6 text-[40px] font-normal leading-[1.2] text-ink">Account, billing, and history export.</h1>
+        <h1 className="mt-6 text-3xl font-normal leading-tight text-ink sm:text-[40px] sm:leading-[1.2]">
+          Account, billing, and history export.
+        </h1>
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           <Surface className="p-6">
             <h2 className="text-xl font-normal text-ink">Account</h2>
             <dl className="mt-5 space-y-4 text-sm">
               <div className="flex justify-between gap-4">
                 <dt className="text-muted">Name</dt>
-                <dd className="font-medium text-ink">{user.name}</dd>
+                <dd className="break-words text-right font-medium text-ink">{user.name}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted">Email</dt>
-                <dd className="font-medium text-ink">{user.email}</dd>
+                <dd className="break-all text-right font-medium text-ink">{user.email}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted">Plan</dt>

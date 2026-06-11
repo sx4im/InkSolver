@@ -99,3 +99,10 @@ a {
   outline: 2px solid hsl(214 100% 64%);
   outline-offset: 2px;
 }
+
+/* Full-height app surfaces: dvh tracks mobile browser chrome so bottom
+   toolbars are never cut off; vh remains as the fallback. */
+.h-app {
+  height: 100vh;
+  height: 100dvh;
+}

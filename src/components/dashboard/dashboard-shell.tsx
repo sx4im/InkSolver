@@ -46,7 +46,7 @@ export function DashboardShell({ user, canvases }: DashboardShellProps) {
         <section className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-end">
           <div className="max-w-3xl">
             <Badge tone="dark">Beta</Badge>
-            <h1 className="mt-6 max-w-2xl text-[40px] font-normal leading-[1.2] text-ink">
+            <h1 className="mt-6 max-w-2xl text-3xl font-normal leading-tight text-ink sm:text-[40px] sm:leading-[1.2]">
               Draw the STEM problem. Solve it beside your work.
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-body">
@@ -204,7 +204,7 @@ function Metric({
   return (
     <div className="rounded-md border border-hairline bg-canvas p-3">
       <Icon className="h-4 w-4 text-muted" aria-hidden="true" />
-      <p className="mt-3 text-lg font-medium text-ink">{value}</p>
+      <p className="mt-3 truncate text-base font-medium text-ink sm:text-lg">{value}</p>
       <p className="mt-1 text-xs text-muted">{label}</p>
     </div>
   );

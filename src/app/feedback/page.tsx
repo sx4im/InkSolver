@@ -16,29 +16,29 @@ export default function FeedbackPage() {
       <main className="mx-auto max-w-6xl px-6 py-12">
         <section className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
           <div className="max-w-xl">
-            <Badge>Beta feedback</Badge>
-            <h1 className="mt-6 text-[40px] font-normal leading-[1.2] text-ink">
-              Capture tester reports while the context is still fresh.
+            <Badge>Feedback</Badge>
+            <h1 className="mt-6 text-3xl font-normal leading-tight text-ink sm:text-[40px] sm:leading-[1.2]">
+              Tell us when a solve goes wrong.
             </h1>
             <p className="mt-5 text-base leading-7 text-body">
-              Store subject, device, expected answer, actual answer, and optional share URL as telemetry so launch
-              issues can be triaged beside solve and error events.
+              Share what you drew, what you expected, and what InkSolver answered. Reports go
+              straight to the team alongside the solve they describe.
             </p>
             <Surface className="mt-8 bg-surface-soft p-5">
               <div className="flex items-start gap-3">
                 <MessageSquareText className="mt-1 h-4 w-4 text-muted" aria-hidden="true" />
                 <div>
-                  <h2 className="text-lg font-normal text-ink">Tester loop</h2>
+                  <h2 className="text-lg font-normal text-ink">What helps most</h2>
                   <p className="mt-2 text-sm leading-6 text-muted">
-                    Ask testers to submit one report for every wrong answer, unreadable handwriting case, export
-                    issue, or confusing verification state.
+                    One report per wrong answer, unreadable handwriting case, export issue, or
+                    confusing verification result — with a share link if you can.
                   </p>
                 </div>
               </div>
             </Surface>
             <Button asChild variant="secondary" className="mt-5">
-              <Link href="/readiness">
-                View readiness
+              <Link href="/">
+                Back to dashboard
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </Button>

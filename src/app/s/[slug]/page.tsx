@@ -62,7 +62,7 @@ export default async function PublicSharePage({ params }: { params: Promise<{ sl
   return (
     <main className="min-h-screen bg-canvas">
       <header className="border-b border-hairline bg-canvas">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+        <div className="mx-auto flex min-h-16 max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2 sm:px-6">
           <Button asChild variant="ghost">
             <Link href="/">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -73,7 +73,7 @@ export default async function PublicSharePage({ params }: { params: Promise<{ sl
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-6 py-8 lg:grid-cols-[1fr_360px]">
+      <section className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:grid-cols-[1fr_360px]">
         <div className="overflow-hidden rounded-lg border border-hairline bg-surface-soft">
           <div className="flex items-center justify-between border-b border-hairline bg-canvas p-4">
             <div>
@@ -82,7 +82,7 @@ export default async function PublicSharePage({ params }: { params: Promise<{ sl
             </div>
             <Badge>{subjectLabel(canvas.subject)}</Badge>
           </div>
-          <div className="relative h-[620px]">
+          <div className="relative h-[420px] sm:h-[620px]">
             <CanvasStage snapshot={canvas.tldrawState} readOnly />
             <div className="pointer-events-none absolute bottom-4 left-4 rounded-md bg-white/90 px-3 py-2 text-xs font-medium text-muted">
               InkSolver free share

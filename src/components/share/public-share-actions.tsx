@@ -74,17 +74,19 @@ export function PublicShareActions({ shareSlug }: { shareSlug: string }) {
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={() => void copyShareLink()}>
+        <Button type="button" variant="secondary" size="sm" onClick={() => void copyShareLink()}>
           <Copy className="h-4 w-4" aria-hidden="true" />
-          Copy link
+          <span className="hidden sm:inline">Copy link</span>
+          <span className="sm:hidden">Copy</span>
         </Button>
-        <Button type="button" onClick={() => void remixCanvas()} disabled={isRemixing}>
+        <Button type="button" size="sm" onClick={() => void remixCanvas()} disabled={isRemixing}>
           {isRemixing ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <PenLine className="h-4 w-4" aria-hidden="true" />
           )}
-          Copy and remix
+          <span className="hidden sm:inline">Copy and remix</span>
+          <span className="sm:hidden">Remix</span>
         </Button>
       </div>
       {status ? <p className="max-w-xs text-right text-xs leading-5 text-muted">{status}</p> : null}

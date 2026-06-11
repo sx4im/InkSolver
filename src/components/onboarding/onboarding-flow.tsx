@@ -50,7 +50,9 @@ export function OnboardingFlow() {
       <section className="grid gap-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
         <div>
           <Badge tone="dark">First solve</Badge>
-          <h1 className="mt-6 max-w-xl text-[40px] font-normal leading-[1.2] text-ink">Set up the first canvas in three moves.</h1>
+          <h1 className="mt-6 max-w-xl text-3xl font-normal leading-tight text-ink sm:text-[40px] sm:leading-[1.2]">
+            Set up the first canvas in three moves.
+          </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-body">
             Choose a subject, open a canvas, draw the problem, and press Solve to see verified
             steps appear beside your work.

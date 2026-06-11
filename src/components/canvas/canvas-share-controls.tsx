@@ -6,19 +6,25 @@ import { CheckCircle2, Eye, Loader2, Share2, Unlink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type ShareState = "idle" | "saving" | "copied" | "error";
 
+// Controlled component: the workspace owns isPublic so the header and the
+// mobile drawer render the same publish state.
 export function CanvasShareControls({
   canvasId,
-  initialIsPublic,
+  isPublic,
+  onPublicChange,
   shareSlug,
+  className,
 }: {
   canvasId: string;
-  initialIsPublic: boolean;
+  isPublic: boolean;
+  onPublicChange: (next: boolean) => void;
   shareSlug: string;
+  className?: string;
 }) {
-  const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [state, setState] = useState<ShareState>("idle");
   const sharePath = `/s/${shareSlug}`;
 
@@ -42,7 +48,7 @@ export function CanvasShareControls({
         throw new Error(`Share update failed with ${response.status}`);
       }
 
-      setIsPublic(nextIsPublic);
+      onPublicChange(nextIsPublic);
       setState("idle");
       return true;
     } catch {
@@ -70,7 +76,7 @@ export function CanvasShareControls({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className={cn("items-center gap-2", className ?? "hidden sm:flex")}>
       <Badge tone={isPublic ? "success" : state === "error" ? "danger" : "neutral"} className="hidden xl:inline-flex">
         {state === "error" ? "Share failed" : isPublic ? "Public" : "Private"}
       </Badge>

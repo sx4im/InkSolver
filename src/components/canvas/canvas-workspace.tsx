@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   Crosshair,
   Download,
+  Eye,
+  EyeOff,
   FileWarning,
   Home,
   Loader2,
@@ -29,7 +31,7 @@ import { InkSolverLogo } from "@/components/brand/inksolver-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CanvasDetail, ChatMessage, RegionBounds, Solution, SolutionStep } from "@/lib/types";
-import { formatDateTime, subjectLabel } from "@/lib/utils";
+import { cn, formatDateTime, subjectLabel } from "@/lib/utils";
 
 type CanvasWorkspaceProps = {
   canvas: CanvasDetail;
@@ -83,7 +85,9 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
   const [chatMessagesForActive, setChatMessagesForActive] = useState(chatMessages);
   const [focusedChatStep, setFocusedChatStep] = useState<SolutionStep | null>(null);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const [isPublic, setIsPublic] = useState(canvas.isPublic);
   const [isExporting, setIsExporting] = useState(false);
   const [lastSolvedAt, setLastSolvedAt] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string>(canvas.updatedAt);
@@ -439,7 +443,7 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-canvas text-body">
+    <div className="h-app flex overflow-hidden bg-canvas text-body">
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-hairline bg-canvas px-2 sm:px-4">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -467,7 +471,12 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
               )}
               <span className="hidden sm:inline">{saveStatus === "saving" ? "Saving" : "Save"}</span>
             </Button>
-            <CanvasShareControls canvasId={canvas.id} initialIsPublic={canvas.isPublic} shareSlug={canvas.shareSlug} />
+            <CanvasShareControls
+              canvasId={canvas.id}
+              isPublic={isPublic}
+              onPublicChange={setIsPublic}
+              shareSlug={canvas.shareSlug}
+            />
             <Button variant="secondary" size="sm" className="hidden md:inline-flex" onClick={() => void handleExport("pdf")} disabled={isExporting}>
               {isExporting ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -512,35 +521,65 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
             </div>
           ) : null}
 
-          <div className="absolute right-5 top-5 z-20 w-[360px] max-w-[calc(100vw-2.5rem)] space-y-3">
-            {notice ? (
-              <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm leading-6 text-ink" role="status">
-                {notice}
+          {/* The panel scrolls within itself and never blocks drawing outside
+              the cards; on phones it can be collapsed entirely. */}
+          <div
+            className={cn(
+              "pointer-events-none absolute right-3 top-3 z-20 flex max-h-[calc(100%-6.5rem)] w-[360px] max-w-[calc(100vw-1.5rem)] flex-col sm:right-5 sm:top-5 sm:max-h-[calc(100%-3rem)]",
+              !isPanelOpen && "hidden lg:flex",
+            )}
+          >
+            <div className="pointer-events-auto min-h-0 space-y-3 overflow-y-auto pb-1 pr-0.5">
+              <div className="flex justify-end lg:hidden">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label="Hide solution panel"
+                  onClick={() => setIsPanelOpen(false)}
+                >
+                  <EyeOff className="h-4 w-4" aria-hidden="true" />
+                  Hide
+                </Button>
               </div>
-            ) : null}
-            {activeSolution ? <SolutionCard solution={activeSolution} onAskStep={handleAskStep} /> : null}
-            <div className="rounded-lg border border-hairline bg-canvas p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-ink">Solve status</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {lastSolvedAt ? `Last solved ${formatDateTime(lastSolvedAt)}` : "Draw a problem, then press Solve."}
-                  </p>
+              {notice ? (
+                <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm leading-6 text-ink" role="status">
+                  {notice}
                 </div>
-                <VerificationBadge status={activeSolution?.verificationStatus ?? "unverifiable"} />
-              </div>
-              <div className="mt-3 flex items-center gap-2 text-xs text-muted">
-                <Crosshair className="h-3.5 w-3.5" aria-hidden="true" />
-                {regionMode === "selection"
-                  ? "Using selected canvas shapes"
-                  : regionMode === "viewport"
-                    ? "Using the visible canvas region"
-                    : "Select shapes, or press Solve to use the visible board"}
+              ) : null}
+              {activeSolution ? <SolutionCard solution={activeSolution} onAskStep={handleAskStep} /> : null}
+              <div className="rounded-lg border border-hairline bg-canvas p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-ink">Solve status</p>
+                    <p className="mt-1 text-xs text-muted">
+                      {lastSolvedAt ? `Last solved ${formatDateTime(lastSolvedAt)}` : "Draw a problem, then press Solve."}
+                    </p>
+                  </div>
+                  <VerificationBadge status={activeSolution?.verificationStatus ?? "unverifiable"} />
+                </div>
+                <div className="mt-3 flex items-center gap-2 text-xs text-muted">
+                  <Crosshair className="h-3.5 w-3.5" aria-hidden="true" />
+                  {regionMode === "selection"
+                    ? "Using selected canvas shapes"
+                    : regionMode === "viewport"
+                      ? "Using the visible canvas region"
+                      : "Select shapes, or press Solve to use the visible board"}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="absolute bottom-4 right-4 z-20">
+          {!isPanelOpen ? (
+            <div className="absolute right-3 top-3 z-20 lg:hidden">
+              <Button variant="secondary" size="sm" onClick={() => setIsPanelOpen(true)}>
+                <Eye className="h-4 w-4" aria-hidden="true" />
+                Solution
+              </Button>
+            </div>
+          ) : null}
+
+          {/* Clears tldraw's bottom toolbar on phones. */}
+          <div className="absolute bottom-20 right-3 z-20 sm:bottom-4 sm:right-4">
             <Button variant="secondary" size="icon" aria-label="Open chat" onClick={() => setIsMobileChatOpen(true)}>
               <PanelRightClose className="h-4 w-4" aria-hidden="true" />
             </Button>
@@ -549,7 +588,7 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
       </section>
       {isNavOpen && (
         <div className="absolute inset-0 z-50 flex">
-          <div className="w-64 border-r border-hairline bg-canvas p-4 shadow-lg">
+          <div className="w-72 max-w-[85vw] overflow-y-auto border-r border-hairline bg-canvas p-4 shadow-lg">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-ink">Navigation</h2>
               <Button variant="ghost" size="icon" onClick={() => setIsNavOpen(false)}>
@@ -577,7 +616,17 @@ export function CanvasWorkspace({ canvas, initialSolutions, chatMessages }: Canv
               </Button>
             </nav>
             <div className="mt-6 border-t border-hairline pt-4 sm:hidden">
-              <p className="text-xs font-medium uppercase text-muted">Canvas actions</p>
+              <p className="text-xs font-medium uppercase text-muted">Share</p>
+              <div className="mt-3">
+                <CanvasShareControls
+                  canvasId={canvas.id}
+                  isPublic={isPublic}
+                  onPublicChange={setIsPublic}
+                  shareSlug={canvas.shareSlug}
+                  className="flex flex-wrap"
+                />
+              </div>
+              <p className="mt-5 text-xs font-medium uppercase text-muted">Canvas actions</p>
               <div className="mt-3 flex flex-col gap-2">
                 <Button
                   variant="secondary"

@@ -31,7 +31,7 @@ export function AppHeader() {
           </Button>
           <Show when="signed-out">
             <SignInButton mode="modal">
-              <Button variant="ghost" size="sm">Sign In</Button>
+              <Button variant="ghost" size="sm" className="hidden sm:inline-flex">Sign In</Button>
             </SignInButton>
             <SignUpButton mode="modal">
               <Button variant="primary" size="sm">Sign Up</Button>
