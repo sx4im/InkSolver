@@ -13,18 +13,6 @@ type TldrawBoardProps = {
   readOnly?: boolean;
 };
 
-// Survive React remounts (dynamic() reload, parent re-render, Clerk hydration).
-// A fresh createTLStore on each mount was reloading the initial snapshot and
-// disposing the live editor — blank canvas + missing toolbars within seconds.
-const storeRegistry = new Map<string, TLStore>();
-
-function getStore(canvasId: string, snapshot?: CanvasSnapshot | null) {
-  const existing = storeRegistry.get(canvasId);
-  if (existing) return existing;
-  const store = createTLStore(snapshot ? { snapshot } : {});
-  storeRegistry.set(canvasId, store);
-  return store;
-}
 
 const tldrawOptions = { maxFontsToLoadBeforeRender: 0 };
 
@@ -54,10 +42,10 @@ export const TldrawBoard = memo(function TldrawBoard({
   onEditorMount,
   readOnly = false,
 }: TldrawBoardProps) {
-  // snapshot is only consumed on first create for this canvasId; including it in
-  // deps would recreate the memo value when the page prop identity churns.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- registry keyed by canvasId
-  const store = useMemo(() => getStore(canvasId, snapshot), [canvasId]);
+  // Create the store once per instance. Because CanvasStage uses key={canvasId}
+  // and manually controls mounting, this component will never accidentally unmount
+  // and remount unless the user actually navigates away.
+  const [store] = useState(() => createTLStore(snapshot ? { snapshot } : {}));
   const editorRef = useRef<Editor | null>(null);
   const onDocumentChangeRef = useRef(onDocumentChange);
   const onEditorMountRef = useRef(onEditorMount);
