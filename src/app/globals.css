@@ -1,0 +1,141 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap');
+@import '@clerk/ui/themes/shadcn.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-geist: 'Geist', sans-serif;
+  --font-serif: 'Instrument Serif', serif;
+  --font-sans: 'Inter', sans-serif;
+
+  --background: 0 0% 100%;
+  --foreground: 220 23% 12%;
+  --primary: 220 23% 12%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 98%;
+  --secondary-foreground: 220 23% 12%;
+  --muted: 220 9% 28%;
+  --muted-foreground: 220 9% 45%;
+  --accent: 239 84% 67%;
+  --accent-foreground: 0 0% 100%;
+  --border: 0 0% 90%;
+  --ring: 239 84% 67%;
+  --radius: 0.5rem;
+
+  --canvas: 0 0% 100%;
+  --ink: 220 23% 12%;
+  --body: 220 11% 23%;
+  --hairline: 0 0% 87%;
+  --primary-active: 211 30% 7%;
+  --surface-soft: 210 40% 98%;
+  --surface-strong: 220 10% 89%;
+  --surface-dark: 220 23% 12%;
+  --signature-coral: 16 100% 33%;
+  --signature-forest: 126 64% 11%;
+  --signature-cream: 38 62% 90%;
+  --signature-peach: 23 95% 73%;
+  --signature-mint: 155 38% 75%;
+  --signature-mustard: 39 67% 55%;
+  --success: 120 100% 20%;
+  --warning: 36 72% 42%;
+  --danger: 0 74% 42%;
+
+  --card: var(--canvas);
+  --card-foreground: var(--ink);
+  --popover: var(--canvas);
+  --popover-foreground: var(--ink);
+  --destructive: var(--danger);
+  --destructive-foreground: 0 0% 100%;
+  --input: 220 9% 28%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: hsl(var(--canvas));
+  color: hsl(var(--ink));
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background: hsl(var(--canvas));
+  color: hsl(var(--body));
+  font-size: 14px;
+  line-height: 1.25;
+  text-rendering: geometricPrecision;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: hsl(var(--signature-mint));
+  color: hsl(var(--ink));
+}
+
+.canvas-grid {
+  background-image:
+    linear-gradient(hsl(var(--hairline) / 0.42) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--hairline) / 0.42) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.focus-ring {
+  outline: 2px solid hsl(214 100% 64%);
+  outline-offset: 2px;
+}
+
+/* Liquid Glass Effect for Dark Aesthetic Landing Page */
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.01);
+  background-blend-mode: luminosity;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: none;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.liquid-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.4px;
+  background: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.15) 20%,
+    rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, 0.15) 80%, rgba(255, 255, 255, 0.45) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Full-height app surfaces: dvh tracks mobile browser chrome so bottom
+   toolbars are never cut off; vh remains as the fallback. */
+.h-app {
+  height: 100vh;
+  height: 100dvh;
+}

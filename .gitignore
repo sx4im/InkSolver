@@ -1,0 +1,23 @@
+.next
+node_modules
+out
+dist
+.env
+.env.local
+.env.*.local
+.data
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tsconfig.tsbuildinfo
+.pytest_cache
+__pycache__
+*.pyc
+.venv
+.venv-*
+playwright-report
+test-results
+
+# clerk configuration (can include secrets)
+/.clerk/

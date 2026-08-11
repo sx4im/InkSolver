@@ -1,0 +1,12 @@
+{
+  "experimentalServices": {
+    "frontend": {
+      "routePrefix": "/",
+      "framework": "nextjs"
+    },
+    "verifier": {
+      "routePrefix": "/api/verifier",
+      "framework": "fastapi"
+    }
+  }
+}

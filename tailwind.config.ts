@@ -1,0 +1,72 @@
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  darkMode: ["class"],
+  content: [
+    "./src/pages/**/*.{ts,tsx}",
+    "./src/components/**/*.{ts,tsx}",
+    "./src/app/**/*.{ts,tsx}",
+    "./src/lib/**/*.{ts,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        card: "hsl(var(--card))",
+        "card-foreground": "hsl(var(--card-foreground))",
+        popover: "hsl(var(--popover))",
+        "popover-foreground": "hsl(var(--popover-foreground))",
+        primary: "hsl(var(--primary))",
+        "primary-foreground": "hsl(var(--primary-foreground))",
+        secondary: "hsl(var(--secondary))",
+        "secondary-foreground": "hsl(var(--secondary-foreground))",
+        muted: "hsl(var(--muted))",
+        "muted-foreground": "hsl(var(--muted-foreground))",
+        accent: "hsl(var(--accent))",
+        "accent-foreground": "hsl(var(--accent-foreground))",
+        destructive: "hsl(var(--destructive))",
+        "destructive-foreground": "hsl(var(--destructive-foreground))",
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        canvas: "hsl(var(--canvas))",
+        ink: "hsl(var(--ink))",
+        body: "hsl(var(--body))",
+        hairline: "hsl(var(--hairline))",
+        "primary-active": "hsl(var(--primary-active))",
+        "surface-soft": "hsl(var(--surface-soft))",
+        "surface-strong": "hsl(var(--surface-strong))",
+        "surface-dark": "hsl(var(--surface-dark))",
+        coral: "hsl(var(--signature-coral))",
+        forest: "hsl(var(--signature-forest))",
+        cream: "hsl(var(--signature-cream))",
+        peach: "hsl(var(--signature-peach))",
+        mint: "hsl(var(--signature-mint))",
+        mustard: "hsl(var(--signature-mustard))",
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
+        danger: "hsl(var(--danger))",
+      },
+      borderRadius: {
+        xs: "2px",
+        sm: "6px",
+        md: "10px",
+        lg: "12px",
+      },
+      fontFamily: {
+        geist: ["var(--font-geist)", "Geist", "sans-serif"],
+        serif: ["var(--font-serif)", "Instrument Serif", "serif"],
+        sans: ["var(--font-sans)", "Inter", "system-ui", "sans-serif"],
+        display: ["var(--font-serif)", "Instrument Serif", "serif"],
+        body: ["var(--font-geist)", "Geist", "sans-serif"],
+      },
+      boxShadow: {
+        button: "0 10px 28px rgba(27, 97, 201, 0.12)",
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;
