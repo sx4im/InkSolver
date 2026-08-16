@@ -175,7 +175,7 @@ Open `http://localhost:3000`. **Everything degrades gracefully**: without `DATAB
 | `LEMON_SQUEEZY_CHECKOUT_URL` / `LEMON_SQUEEZY_WEBHOOK_SECRET` | no | Pro upgrades |
 | `POSTHOG_KEY` / `POSTHOG_HOST`, `SENTRY_INGEST_URL` | no | Analytics & error tracking |
 | `NEXT_PUBLIC_APP_URL` | production | Absolute URL for share/OG metadata |
-| `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` | no | Free at [tldraw.dev](https://tldraw.dev) |
+| `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` | production | tldraw license key (free at [tldraw.dev](https://tldraw.dev)). Without a valid key, tldraw blanks the entire canvas 5 seconds after load on https deployments — localhost is unaffected |
 | `INKSOLVER_OWNER_EMAIL` / `INKSOLVER_ADMIN_TOKEN` | no | Gate `/readiness` + observability APIs in production |
 
 The built-in **`/readiness` dashboard** tracks every gate live as you configure it.
@@ -210,7 +210,7 @@ CI runs all of the above on every push.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fsx4im%2FInkSolver)
 
-1. **App** — click the button (or connect the repo on Vercel), add your environment variables, deploy.
+1. **App** — click the button (or connect the repo on Vercel), add your environment variables, deploy. Include `NEXT_PUBLIC_TLDRAW_LICENSE_KEY`: without it the canvas goes blank ~5s after load on production (tldraw's license gate; localhost never shows this).
 2. **Database** — create a [Neon](https://neon.tech) Postgres, set `DATABASE_URL`, run `pnpm db:migrate`.
 3. **Verifier** — deploy `services/verifier/` (Dockerfile included) to Railway, Fly.io, or Cloud Run; set `SYMPY_VERIFIER_URL`.
 4. Open `/readiness` to confirm every production gate is green.
